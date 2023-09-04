@@ -165,7 +165,7 @@ def read_previous_error_metrics():
         spreadsheet = gc.open(config_file['name_GDrive'])
             
         worksheet = spreadsheet.get_worksheet(0)
-        list_of_dicts = worksheet.get_all_records()
+        list_of_dicts = worksheet.get_all_records(numericise_ignore=['all'])
         
         # Convert list of dicts to a DataFrame
         previous_metrics_df = pd.DataFrame(list_of_dicts)
@@ -251,13 +251,13 @@ def main():
     # Main area
     st.title("Leaderboard")
     try:
-        st.dataframe(pd.DataFrame(previous_metrics, columns=['Team'] + config_file['col_show']).sort_values(by=config_file['col_show'][0]))
+        st.dataframe(pd.DataFrame(previous_metrics, columns=['Team'] + config_file['col_show']).sort_values(by=config_file['col_show'][0], ascending=False))
     except UnboundLocalError:
         previous_metrics, _, previous_error_flag = read_previous_error_metrics()
         if previous_error_flag:
             st.sidebar.error("Error: Leaderboard could not be loaded.")
         else:
-            st.dataframe(pd.DataFrame(previous_metrics, columns=['Team'] + config_file['col_show']).sort_values(by=config_file['col_show'][0]))
+            st.dataframe(pd.DataFrame(previous_metrics, columns=['Team'] + config_file['col_show']).sort_values(by=config_file['col_show'][0], ascending=False))
             st.sidebar.write("Leaderboard refreshed.")
         
 
