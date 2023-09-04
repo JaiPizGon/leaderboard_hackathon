@@ -14,9 +14,10 @@ Welcome to the Machine Learning Competition Leaderboard App repository! This int
 
 ## Getting Started
 
+0. Create GCP credentials as stated [here](https://www.datacamp.com/tutorial/how-to-analyze-data-in-google-sheets-with-python-a-step-by-step-guide).
 1. Clone this repository to your local machine.
 2. Install the required dependencies using `pip install -r requirements.txt`.
-3. Configure the application settings, including competition type and evaluation metrics.
+3. Configure the application settings, including competition type and evaluation metrics in the `config.py` file.
 4. Run the Streamlit app by executing `streamlit run competition_app.py` in your terminal.
 
 ## Usage
