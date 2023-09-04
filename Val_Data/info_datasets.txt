@@ -1,0 +1,6 @@
+INFORMACION DATASETS
+* TVdataEEMhourlyOutput.csv: Output del problema de regresión sobre predecir generación Eólica a partir de Wind Speed, Wind Direction y Temperature.
+
+
+NOTAS
+* TVdataEEMhourly_Jaime_output_red.csv y TVdataEEMhourlyOutput.csv son los mismos
