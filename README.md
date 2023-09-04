@@ -23,11 +23,9 @@ Welcome to the Machine Learning Competition Leaderboard App repository! This int
 ## Usage
 
 1. Launch the Streamlit app by following the getting started instructions.
-2. Participants can log in using their unique credentials to access their dashboard.
-3. Students can upload files containing their model's predictions for evaluation.
-4. The app will automatically assess the performance of each submission based on the selected competition type.
-5. The leaderboard will display participants' scores and rankings, updated in real time.
-6. Review past competitions and leaderboard rankings for insights and comparison.
+2. Students can upload files containing their model's predictions for evaluation.
+3. The app will automatically assess the performance of each submission based on the selected competition type.
+4. The leaderboard will display participants' scores and rankings, updated in real time.
 
 ## License
 
