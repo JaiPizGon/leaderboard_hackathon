@@ -225,7 +225,4 @@ if __name__ == "__main__":
     )
     gc = gspread.authorize(credentials)
     
-    ## Read Admin account configuration
-    admin_account = st.secrets["admin_account"]
-    
     main()
