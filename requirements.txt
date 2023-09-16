@@ -50,7 +50,6 @@ Pympler==1.0.1
 pyparsing==3.0.9
 pytz==2023.3
 pytz-deprecation-shim==0.1.0.post0
-pywin32==305.1
 referencing==0.30.2
 requests==2.31.0
 requests-oauthlib==1.3.1
