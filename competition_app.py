@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from config import config_function
+from competition_config import config_function
 from google.oauth2 import service_account
 import gspread
 
@@ -197,7 +197,7 @@ def main():
         # Read user data:
         users_data, users_data_error = read_users_file()
         if users_data_error:
-            st.sidebar.error("Error: users.json file could not be read.")
+            st.sidebar.error("Error: users file could not be read.")
 
         else:
             # Validate user
