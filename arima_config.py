@@ -19,7 +19,7 @@ def config_function():
     output['n_tries'] = 1
     
     # Define the number of steps between frames in champion animation
-    output['n_steps'] = 3
+    output['n_steps'] = 10
     
     ##############################################################
     # Name of ARIMA series file

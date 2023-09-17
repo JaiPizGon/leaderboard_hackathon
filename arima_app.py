@@ -297,12 +297,19 @@ def main():
         df = df.pivot(columns='Team', values='mark')
         
         # Create bar chart race animation
-        html_str = bcr.bar_chart_race(
-                df.ffill().fillna(0), 
-                interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
-                period_fmt='%H:%m'
-            ).data
-
+        try:
+            html_str = bcr.bar_chart_race(
+                    df.ffill().fillna(0), 
+                    interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
+                    period_fmt='%H:%m'
+                ).data
+        except AttributeError:
+            html_str = bcr.bar_chart_race(
+                    df.ffill().fillna(0), 
+                    interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
+                    period_fmt='%H:%m'
+                )
+            
         start = html_str.find('base64,') + len('base64,')
         end = html_str.find('">')
 
