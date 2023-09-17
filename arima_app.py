@@ -5,7 +5,6 @@ from google.oauth2 import service_account
 import gspread
 from datetime import datetime
 import bar_chart_race as bcr
-import streamlit.components.v1 as components
 import base64
 
 # Make the web page fill the full area
@@ -13,6 +12,11 @@ st.set_page_config(layout="wide")
 
 # Load config from config.py
 config_file = config_function()
+
+@st.cache_data
+def convert_df(df):
+    # IMPORTANT: Cache the conversion to prevent computation on every rerun
+    return df.to_csv().encode('utf-8')
 
 def read_users_file():
     """
@@ -265,8 +269,6 @@ def main():
         merged_df = pd.merge(previous_results.reset_index(), series, 
                             on=['Series', 'p', 'q'], how='left')
 
-        print(previous_results)
-        print(merged_df)
         # Fill any NaN values in the 'weight' column with zeros
         # This ensures that all teams have a 'weight' even if they haven't made any attempts
         merged_df['weight'].fillna(0, inplace=True)
@@ -310,6 +312,21 @@ def main():
         
         # Show winning team name
         st.subheader(f"Winning team: {winning_team}")
+
+        # Filtering the DataFrame to include only rows with max 'mark' for each 'Team'
+        filtered_df = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
+        
+        filtered_df = filtered_df[['Team','mark']]
+
+        csv = convert_df(filtered_df)
+
+        st.download_button(
+            label="Download marks as CSV",
+            data=csv,
+            file_name='marks.csv',
+            mime='text/csv',
+        )
+
         
 
 if __name__ == "__main__":
