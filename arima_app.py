@@ -256,6 +256,7 @@ def main():
     
     if st.session_state.show_solution:
         series_solution = series.loc[series['Series'] == option, st.session_state.results.columns[1:]]
+        series_solution.index = series_solution.index + 1
         st.dataframe(pd.DataFrame(series_solution))
     
     if st.session_state.show_results:
