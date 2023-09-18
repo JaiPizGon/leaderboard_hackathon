@@ -124,6 +124,7 @@ def read_series():
 # Function to clear the session state for showing solutions
 def clear_show_solution():
     st.session_state.show_solution = False
+    st.session_state.show_results = False
     return
 
 
