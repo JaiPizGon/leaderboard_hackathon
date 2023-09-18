@@ -144,7 +144,7 @@ def main():
         opt = ()
         st.sidebar.error("Error: ARIMA series file could not be read.")
     else:
-        opt = (str(x) for x in series['Series'])
+        opt = (f"{str(r['Series'])} (reward: {str(r['weight'])})" for i, r in series.iterrows())
 
     # Dropdown for selecting Series number
     option = st.sidebar.selectbox(

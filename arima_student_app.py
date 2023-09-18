@@ -132,7 +132,7 @@ def main():
         opt = ()
         st.sidebar.error("Error: ARIMA series file could not be read.")
     else:
-        opt = (str(x) for x in series['Series'])
+        opt = (f"{str(r['Series'])} (reward: {str(r['weight'])})" for i, r in series.iterrows())
 
     # Dropdown for selecting Series number
     option = st.sidebar.selectbox(
@@ -170,14 +170,14 @@ def main():
                 
                 # Check if team has not send more than n_tries
                 try:
-                    team_tries = previous_results.loc[previous_results['Series'] == option, 'Team'].value_counts()[team_name]
+                    team_tries = previous_results.loc[previous_results['Series'] == option.split(' ')[0], 'Team'].value_counts()[team_name]
                 except KeyError:
                     team_tries = 0
                 
                 if team_tries < config_file['n_tries']:
                     # Read result from the student
                     entry_empty = False
-                    df_dict = {'Team': team_name, 'Series': option}
+                    df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
                     for index, col in enumerate(st.session_state.results.columns[1:]):
                         df_dict[col] = st.session_state[col]
                         if st.session_state[col] == '':
