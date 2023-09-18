@@ -191,14 +191,14 @@ def main():
                 
                 # Check if team has not send more than n_tries
                 try:
-                    team_tries = previous_results.loc[previous_results['Series'] == option, 'Team'].value_counts()[team_name]
+                    team_tries = previous_results.loc[previous_results['Series'] == option.split(' ')[0], 'Team'].value_counts()[team_name]
                 except KeyError:
                     team_tries = 0
                 
                 if team_tries < config_file['n_tries']:
                     # Read result from the student
                     entry_empty = False
-                    df_dict = {'Team': team_name, 'Series': option}
+                    df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
                     for index, col in enumerate(st.session_state.results.columns[1:]):
                         df_dict[col] = st.session_state[col]
                         if st.session_state[col] == '':
@@ -256,8 +256,9 @@ def main():
         
     
     if st.session_state.show_solution:
-        series_solution = series.loc[series['Series'] == option, st.session_state.results.columns[1:]]
-        series_solution.index = series_solution.index + 1
+        series_solution = series.loc[series['Series'] == option.split(' ')[0], st.session_state.results.columns[1:]]
+        new_index = ['Series #' + str(x + 1) for x in series_solution.index.values]
+        series_solution.index = new_index
         st.dataframe(pd.DataFrame(series_solution))
     
     if st.session_state.show_results:
