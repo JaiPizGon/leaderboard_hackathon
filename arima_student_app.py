@@ -31,27 +31,25 @@ def read_users_file():
         # Convert list of dicts to a dictionary
         users_data = {record['Team']: record['Password'] for record in list_of_dicts}
         
-        error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
         users_data = None
-        error_flag = 1
-        
-    return users_data, error_flag
+    
+    st.session_state.users_data = users_data
+    return 
 
-def validate_user(users_data, team_name, password):
+def validate_user(team_name, password):
     """
     Validate user credentials.
 
     Parameters:
-    users_data (dict): A dictionary containing user data with team names as keys and hashed passwords as values.
     team_name (str): The team name provided by the user.
     password (str): The password provided by the user.
 
     Returns:
     bool: True if user credentials are valid, False otherwise.
     """
-    if team_name in users_data:
-        if users_data[team_name] == password:
+    if team_name in st.session_state.users_data:
+        if st.session_state.users_data[team_name] == password:
             return True
     return False
 
@@ -76,6 +74,7 @@ def read_previous_results():
         previous_results_df = pd.DataFrame(list_of_dicts)
         
         error_flag = 0
+        
     except gspread.exceptions.SpreadsheetNotFound:
         previous_results_df = None
         worksheet = None
@@ -127,18 +126,21 @@ def main():
     password = st.sidebar.text_input("Password", type="password")
 
     # Read series and check for errors
-    series, previous_error_flag = read_series()
-    if previous_error_flag:
-        opt = ()
-        st.sidebar.error("Error: ARIMA series file could not be read.")
-    else:
-        opt = (f"{str(r['Series'])} (reward: {str(r['weight'])})" for i, r in series.iterrows())
+    if 'options' not in st.session_state:
+        series, previous_error_flag = read_series()
+        st.session_state.series = series
+        if previous_error_flag:
+            st.session_state.options = ()
+            st.sidebar.error("Error: ARIMA series file could not be read.")
+        else:
+            st.session_state.options = [f"{str(r['Series'])} (reward: {str(r['weight'])})" for i, r in series.iterrows()]
 
     # Dropdown for selecting Series number
     option = st.sidebar.selectbox(
         'Series #',
-        opt
+        st.session_state.options
     )
+    
 
     # Initialize session state for results if not already present
     if 'results' not in st.session_state:
@@ -151,59 +153,57 @@ def main():
             df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f']
 
         st.session_state.results = pd.DataFrame(columns=df_columns)
+    
+    # Read team names and passwords
+    if 'users_data' not in st.session_state:
+        read_users_file()
 
     # Sidebar Buttons
     # Submit Button
     if st.sidebar.button("Submit"):
         # Handling code after clicking submit
-        # Read and validate user data
-        users_data, users_data_error = read_users_file()
-        if users_data_error:
-            st.sidebar.error("Error: users.json file could not be read.")
-
-        else:
-            # Validate user
-            if validate_user(users_data, team_name, password):
-                # Update leaderboard and store error metrics
-                st.sidebar.write("Storing results...")
-                previous_results, worksheet, previous_error_flag = read_previous_results()
-                
-                # Check if team has not send more than n_tries
-                try:
-                    team_tries = previous_results.loc[previous_results['Series'] == option.split(' ')[0], 'Team'].value_counts()[team_name]
-                except KeyError:
-                    team_tries = 0
-                
-                if team_tries < config_file['n_tries']:
-                    # Read result from the student
-                    entry_empty = False
-                    df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
-                    for index, col in enumerate(st.session_state.results.columns[1:]):
-                        df_dict[col] = st.session_state[col]
-                        if st.session_state[col] == '':
-                            entry_empty = True
-                            break
-                    df_dict['Time'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                        
-                    if entry_empty:
-                        st.sidebar.error("Error: could not submit empty inputs")
-                        
-                    else:
-                        result_sent = pd.DataFrame(df_dict, index=[0])
-                        
-                        if previous_error_flag:
-                            st.sidebar.error("Error: Previous tries could not be loaded.")
-                        
-                        else:
-                            try:
-                                worksheet.append_row(result_sent.values.tolist()[0])
-                                st.sidebar.success(f"Results updated. You have {config_file['n_tries'] - team_tries - 1} tries left.")
-                            except:
-                                st.sidebar.error("Error: Leaderboard could not be updated.")
+        # Validate user
+        if validate_user(team_name, password):
+            # Update leaderboard and store error metrics
+            st.sidebar.write("Storing results...")
+            previous_results, worksheet, previous_error_flag = read_previous_results()
+            
+            # Check if team has not send more than n_tries
+            try:
+                team_tries = previous_results.loc[previous_results['Series'] == option.split(' ')[0], 'Team'].value_counts()[team_name]
+            except KeyError:
+                team_tries = 0
+            
+            if team_tries < config_file['n_tries']:
+                # Read result from the student
+                entry_empty = False
+                df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
+                for index, col in enumerate(st.session_state.results.columns[1:]):
+                    df_dict[col] = st.session_state[col]
+                    if st.session_state[col] == '':
+                        entry_empty = True
+                        break
+                df_dict['Time'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    
+                if entry_empty:
+                    st.sidebar.error("Error: could not submit empty inputs")
+                    
                 else:
-                    st.sidebar.error(f"Error: {team_name} has exceeded the number of tries for Serie {option}.")
+                    result_sent = pd.DataFrame(df_dict, index=[0])
+                    
+                    if previous_error_flag:
+                        st.sidebar.error("Error: Previous tries could not be loaded.")
+                    
+                    else:
+                        try:
+                            worksheet.append_row(result_sent.values.tolist()[0])
+                            st.sidebar.success(f"Results updated. You have {config_file['n_tries'] - team_tries - 1} tries left.")
+                        except:
+                            st.sidebar.error("Error: Leaderboard could not be updated.")
             else:
-                st.sidebar.error("Error: Incorrect user or password.")
+                st.sidebar.error(f"Error: {team_name} has exceeded the number of tries for Serie {option}.")
+        else:
+            st.sidebar.error("Error: Incorrect user or password.")
             
     # Main area
     st.title("Input parameters")

@@ -18,50 +18,6 @@ def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
     return df.to_csv().encode('utf-8')
 
-def read_users_file():
-    """
-    Read user data from Google Sheets using Google Sheets API.
-
-    Returns:
-    tuple: A tuple containing two values:
-        - users_data (dict or None): A dictionary containing user data with team names as keys and passwords as values,
-          or None if the spreadsheet or worksheet could not be found.
-        - error_flag (int): An error flag indicating whether an error occurred during accessing the spreadsheet.
-          - 0: No error occurred.
-          - 1: Spreadsheet not found error occurred.
-    """
-    try:
-        spreadsheet = gc.open(config_file['pwd_table'])
-        worksheet = spreadsheet.get_worksheet(0)
-        list_of_dicts = worksheet.get_all_records()
-        
-        # Convert list of dicts to a dictionary
-        users_data = {record['Team']: record['Password'] for record in list_of_dicts}
-        
-        error_flag = 0
-    except gspread.exceptions.SpreadsheetNotFound:
-        users_data = None
-        error_flag = 1
-        
-    return users_data, error_flag
-
-def validate_user(users_data, team_name, password):
-    """
-    Validate user credentials.
-
-    Parameters:
-    users_data (dict): A dictionary containing user data with team names as keys and hashed passwords as values.
-    team_name (str): The team name provided by the user.
-    password (str): The password provided by the user.
-
-    Returns:
-    bool: True if user credentials are valid, False otherwise.
-    """
-    if team_name in users_data:
-        if users_data[team_name] == password:
-            return True
-    return False
-
 def read_previous_results():
     """
     Read previous results from Google Sheets using Google Sheets API.
@@ -140,17 +96,19 @@ def main():
     password = st.sidebar.text_input("Password", type="password")
 
     # Read series and check for errors
-    series, previous_error_flag = read_series()
-    if previous_error_flag:
-        opt = ()
-        st.sidebar.error("Error: ARIMA series file could not be read.")
-    else:
-        opt = (f"{str(r['Series'])} (reward: {str(r['weight'])})" for i, r in series.iterrows())
+    if 'options' not in st.session_state:
+        series, previous_error_flag = read_series()
+        st.session_state.series = series
+        if previous_error_flag:
+            st.session_state.options = ()
+            st.sidebar.error("Error: ARIMA series file could not be read.")
+        else:
+            st.session_state.options = [f"{str(r['Series'])} (reward: {str(r['weight'])})" for i, r in series.iterrows()]
 
     # Dropdown for selecting Series number
     option = st.sidebar.selectbox(
         'Series #',
-        opt,
+        st.session_state.options,
         on_change=clear_show_solution
     )
 
@@ -172,60 +130,7 @@ def main():
     
     if 'show_results' not in st.session_state:
         st.session_state.show_results = False
-
-    # Sidebar Buttons
-    # Submit Button
-    if st.sidebar.button("Submit"):
-        # Handling code after clicking submit
-        # Read and validate user data
-        users_data, users_data_error = read_users_file()
-        if users_data_error:
-            st.sidebar.error("Error: users.json file could not be read.")
-
-        else:
-            # Validate user
-            if validate_user(users_data, team_name, password):
-                # Update leaderboard and store error metrics
-                st.sidebar.write("Storing results...")
-                previous_results, worksheet, previous_error_flag = read_previous_results()
-                
-                # Check if team has not send more than n_tries
-                try:
-                    team_tries = previous_results.loc[previous_results['Series'] == option.split(' ')[0], 'Team'].value_counts()[team_name]
-                except KeyError:
-                    team_tries = 0
-                
-                if team_tries < config_file['n_tries']:
-                    # Read result from the student
-                    entry_empty = False
-                    df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
-                    for index, col in enumerate(st.session_state.results.columns[1:]):
-                        df_dict[col] = st.session_state[col]
-                        if st.session_state[col] == '':
-                            entry_empty = True
-                            break
-                    df_dict['Time'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-                        
-                    if entry_empty:
-                        st.sidebar.error("Error: could not submit empty inputs")
-                        
-                    else:
-                        result_sent = pd.DataFrame(df_dict, index=[0])
-                        
-                        if previous_error_flag:
-                            st.sidebar.error("Error: Previous tries could not be loaded.")
-                        
-                        else:
-                            try:
-                                worksheet.append_row(result_sent.values.tolist()[0])
-                                st.sidebar.success(f"Results updated. You have {config_file['n_tries'] - team_tries - 1} tries left.")
-                            except:
-                                st.sidebar.error("Error: Leaderboard could not be updated.")
-                else:
-                    st.sidebar.error(f"Error: {team_name} has exceeded the number of tries for Serie {option}.")
-            else:
-                st.sidebar.error("Error: Incorrect user or password.")
-                
+    
     # Solution area
     # Button for showing solution
     if st.sidebar.button("Show solution"):
@@ -269,7 +174,7 @@ def main():
         
         # Merge previous results with the series DataFrame on specific columns
         # This combines the 'Series', 'p', and 'q' columns from both DataFrames
-        merged_df = pd.merge(previous_results.reset_index(), series, 
+        merged_df = pd.merge(previous_results.reset_index(), st.session_state.series, 
                             on=['Series', 'p', 'q'], how='left')
 
         # Fill any NaN values in the 'weight' column with zeros
