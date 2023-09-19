@@ -6,7 +6,7 @@ def config_function():
     ##############################################################
     ### Configuration to modify
     # Name of leaderboard file
-    output['name_GDrive'] = 'ARIMA_Hackathon_GITT+BA_2023' 
+    output['name_GDrive'] = 'ARMA_Hackathon_IMAT_2023' 
 
     
     # Define name of the Spreadsheet in GDrive that contains the team names and the pwd.
