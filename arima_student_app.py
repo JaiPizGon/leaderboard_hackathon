@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-from arima_config import config_function
 from google.oauth2 import service_account
 import gspread
 from datetime import datetime
@@ -8,8 +7,6 @@ from datetime import datetime
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
 
-# Load config from config.py
-config_file = config_function()
 
 def read_users_file():
     """
@@ -24,7 +21,7 @@ def read_users_file():
           - 1: Spreadsheet not found error occurred.
     """
     try:
-        spreadsheet = gc.open(config_file['pwd_table'])
+        spreadsheet = gc.open(google_sheets['name_teams'])
         worksheet = spreadsheet.get_worksheet(0)
         list_of_dicts = worksheet.get_all_records()
         
@@ -65,7 +62,7 @@ def read_previous_results():
           - 1: File not found error occurred.
     """
     try:
-        spreadsheet = gc.open(config_file['name_GDrive'])
+        spreadsheet = gc.open(google_sheets['name_arima'])
             
         worksheet = spreadsheet.get_worksheet(0)
         list_of_dicts = worksheet.get_all_records(numericise_ignore=['all'])
@@ -95,7 +92,7 @@ def read_series():
           - 1: File not found error occurred.
     """
     try:
-        spreadsheet = gc.open(config_file['name_Arima'])
+        spreadsheet = gc.open(f"{google_sheets['name_arima']}_Series")
             
         worksheet = spreadsheet.get_worksheet(0)
         list_of_dicts = worksheet.get_all_records(numericise_ignore=['all'])
@@ -107,7 +104,7 @@ def read_series():
         
         error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
-        previous_results_df = None
+        series_df = None
 
         error_flag = 1
     
@@ -116,7 +113,7 @@ def read_series():
 
 def main():
     # Set the main title based on the problem type from the config file
-    st.title(f"{config_file['problem_type']} Hackathon")
+    st.title(f"{config['arima_problem_type']} Hackathon")
 
     # Sidebar Section
     st.sidebar.title("User configuration")
@@ -145,11 +142,11 @@ def main():
     # Initialize session state for results if not already present
     if 'results' not in st.session_state:
         # Define columns based on the problem type
-        if config_file['problem_type'] == 'ARMA':
+        if config['arima_problem_type'] == 'ARMA':
             df_columns = ['Team', 'p', 'q']
-        elif config_file['problem_type'] == 'ARIMA':
+        elif config['arima_problem_type'] == 'ARIMA':
             df_columns = ['Team', 'p', 'd', 'q']
-        elif config_file['problem_type'] == 'SARIMA':
+        elif config['arima_problem_type'] == 'SARIMA':
             df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f']
 
         st.session_state.results = pd.DataFrame(columns=df_columns)
@@ -174,7 +171,7 @@ def main():
             except KeyError:
                 team_tries = 0
             
-            if team_tries < config_file['n_tries']:
+            if team_tries < config['n_tries']:
                 # Read result from the student
                 entry_empty = False
                 df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
@@ -197,7 +194,7 @@ def main():
                     else:
                         try:
                             worksheet.append_row(result_sent.values.tolist()[0])
-                            st.sidebar.success(f"Results updated. You have {config_file['n_tries'] - team_tries - 1} tries left.")
+                            st.sidebar.success(f"Results updated. You have {config['n_tries'] - team_tries - 1} tries left.")
                         except:
                             st.sidebar.error("Error: Leaderboard could not be updated.")
             else:
@@ -224,5 +221,11 @@ if __name__ == "__main__":
         scopes=['https://spreadsheets.google.com/feeds', 'https://www.googleapis.com/auth/drive'],
     )
     gc = gspread.authorize(credentials)
+    
+    ## Read google sheet configuration
+    google_sheets = st.secrets["google_sheets"]
+    
+    ## Read config 
+    config = st.secrets["config"]
     
     main()
