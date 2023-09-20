@@ -68,7 +68,7 @@ def read_series():
         
         error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
-        previous_results_df = None
+        series_df = None
 
         error_flag = 1
     
