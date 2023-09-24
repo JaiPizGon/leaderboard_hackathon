@@ -35,6 +35,7 @@ def read_previous_results():
         
         # Convert list of dicts to a DataFrame
         previous_results_df = pd.DataFrame(list_of_dicts)
+        previous_results_df['lambda'] = previous_results_df['lambda'].str.replace(',', '.').astype(float)
         
         error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
@@ -66,6 +67,7 @@ def read_series():
         series_df = pd.DataFrame(list_of_dicts)
         
         series_df['weight'] = series_df['weight'].str.replace(',', '.').astype(float)
+        series_df['lambda'] = series_df['lambda'].str.replace(',', '.').astype(float)
         
         error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
@@ -169,8 +171,9 @@ def main():
     for index, col in enumerate(st.session_state.results.columns[1:-2]):
         with txtColumns[index]:
             st.text_input(col, key=col)
+    with txtColumns[index+1]:
+        st.text_input(st.session_state.results.columns[-1], key=st.session_state.results.columns[-1])
     st.checkbox(st.session_state.results.columns[-2], key=st.session_state.results.columns[-2])
-    st.checkbox(st.session_state.results.columns[-1], key=st.session_state.results.columns[-1])
         
     
     if st.session_state.show_solution:
@@ -187,17 +190,44 @@ def main():
         
         # Merge previous results with the series DataFrame on specific columns
         # This combines the 'Series', 'p', and 'q' columns from both DataFrames
-        merged_df = pd.merge(previous_results.reset_index(), st.session_state.series, 
-                            on=previous_results.columns[1:-1].tolist(), how='left')
+        # merged_df = pd.merge(previous_results.reset_index(), st.session_state.series, 
+        #                     on=previous_results.columns[1:-2].tolist(), how='left')# Sort both dataframes by the key columns
+        previous_results = previous_results.reset_index().sort_values(by=['Series', 'p', 'q', 'include_mean', 'lambda'])
+        series = st.session_state.series.sort_values(by=['Series', 'p', 'q', 'include_mean', 'lambda'])
+        
+        # Cartesian product of the two dataframes
+        previous_results['key'] = 1
+        series['key'] = 1
+        cartesian_product = pd.merge(previous_results, series, on='key').drop('key', axis=1)
+        
+        # Filter the resulting dataframe based on conditions
+        idx = (cartesian_product['Series_x'] == cartesian_product['Series_y']) & \
+            (cartesian_product['p_x'] == cartesian_product['p_y']) & \
+            (cartesian_product['q_x'] == cartesian_product['q_y']) & \
+            (cartesian_product['include_mean_x'] == cartesian_product['include_mean_y']) & \
+            ((cartesian_product['lambda_x'] - cartesian_product['lambda_y']).abs() <= config['lambda_tol'])
+        merged_df = cartesian_product.loc[idx,:]
 
+        # Drop duplicated columns and rename columns to their original names
+        merged_df = merged_df.drop(columns=['Series_y', 'p_y', 'q_y', 'include_mean_y'])
+        merged_df.columns = [col.replace('_x', '') for col in merged_df.columns]
+        
+        merged_df = merged_df.drop(columns=['lambda', 'weight', 'index'])
+        merged_df = merged_df.rename(columns={'lambda_y':'lambda'})
+        previous_results = previous_results.drop(columns=['key', 'index'])
+        series = series.drop(columns=['key'])
+        
+        # Save marks
+        merged_df = pd.merge(merged_df, series, on=previous_results.columns[1:-1].tolist(), how='left')
+        
         # Fill any NaN values in the 'weight' column with zeros
         # This ensures that all teams have a 'weight' even if they haven't made any attempts
         merged_df['weight'].fillna(0, inplace=True)
-
+        
         # Create a 'mark' column to hold the cumulative sum of 'weight' for each team
         # This will be used for scoring, and is multiplied by 100 for percentage representation
         merged_df['mark'] = merged_df.groupby('Team')['weight'].cumsum() * 100
-
+        
         # Re-set the index of the merged DataFrame to 'Time'
         # This is to ensure that the DataFrame is indexed by time, which is likely important for time-series data
         merged_df.set_index('Time', inplace=True)
@@ -207,75 +237,89 @@ def main():
 
         # Filter the DataFrame to include only 'Team' and 'mark' columns
         df = merged_df[['Team', 'mark']]
+        
+        # Find teams in previous_results that are not in result_df
+        missing_teams = previous_results[~previous_results['Team'].isin(df['Team'])]
 
+        # Set the mark for these teams to 0.0
+        missing_teams['mark'] = 0.0
+        
+        missing_teams.set_index('Time', inplace=True)
+
+        # Concatenate this to result_df
+        df = pd.concat([df, missing_teams[['Team','mark']].drop_duplicates()], ignore_index=True)
+        
         # Sort by 'mark' in descending and 'Time' in ascending order
-        sorted_df = merged_df.sort_values(by=['mark', 'Time'], ascending=[False, True])
+        sorted_df = df.reset_index().rename(columns={'index':'Time'}).sort_values(by=['mark', 'Time'], ascending=[False, True])
 
-        # Get the team with the highest mark that reached it the fastest
-        winning_team = sorted_df.iloc[0]['Team']
-        
-        # Pivot the DataFrame so that each 'Team' becomes a column
-        df = df.pivot(columns='Team', values='mark')
-        
-        if st.session_state.show_results:
-            # Create bar chart race animation
-            try:
-                html_str = bcr.bar_chart_race(
-                        df.ffill().fillna(0), 
-                        interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
-                        period_fmt='%H:%m'
-                    ).data
-            except AttributeError:
-                html_str = bcr.bar_chart_race(
-                        df.ffill().fillna(0), 
-                        interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
-                        period_fmt='%H:%m'
-                    )
+        try:
+            # Get the team with the highest mark that reached it the fastest
+            winning_team = sorted_df.iloc[0]['Team']
+            
+            # Pivot the DataFrame so that each 'Team' becomes a column
+            df = df.pivot(columns='Team', values='mark')
+            
+            if st.session_state.show_results:
+                # Create bar chart race animation
+                try:
+                    html_str = bcr.bar_chart_race(
+                            df.ffill().fillna(0), 
+                            interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
+                            period_fmt='%H:%m'
+                        ).data
+                except AttributeError:
+                    html_str = bcr.bar_chart_race(
+                            df.ffill().fillna(0), 
+                            interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
+                            period_fmt='%H:%m'
+                        )
+                    
+                start = html_str.find('base64,') + len('base64,')
+                end = html_str.find('">')
+
+                video = base64.b64decode(html_str[start:end])
                 
-            start = html_str.find('base64,') + len('base64,')
-            end = html_str.find('">')
+                st.video(video)
 
-            video = base64.b64decode(html_str[start:end])
+            if st.session_state.show_leaderboard:
+                # Identify the last non-NaN value for each column
+                last_non_nan_values = df.apply(lambda col: col.dropna().iloc[-1])
+                # Sort the values in descending order
+                sorted_values = last_non_nan_values.sort_values(ascending=True)
+                
+                # Get distinct colors for each bar using the viridis colormap
+                colors = plt.cm.viridis(np.linspace(0, 1, len(sorted_values)))
+                
+                # Plotting the values
+                fig = plt.figure(figsize=(10, 6))
+                sorted_values.plot(kind='barh', color=colors)
+                plt.title("Leaderboard")
+                plt.ylabel("Value")
+                plt.xlabel("Column Name")
+                plt.xticks(rotation=0)
+                plt.grid(axis='x', linestyle='--', alpha=0.7)
+                plt.tight_layout()
+
+                st.pyplot(fig)
+
+            # Show winning team name
+            st.subheader(f"Winning team: {winning_team}")
+
+            # Filtering the DataFrame to include only rows with max 'mark' for each 'Team'
+            filtered_df = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
             
-            st.video(video)
+            filtered_df = filtered_df[['Team','mark']]
 
-        if st.session_state.show_leaderboard:
-            # Identify the last non-NaN value for each column
-            last_non_nan_values = df.apply(lambda col: col.dropna().iloc[-1])
-            # Sort the values in descending order
-            sorted_values = last_non_nan_values.sort_values(ascending=True)
-            
-            # Get distinct colors for each bar using the viridis colormap
-            colors = plt.cm.viridis(np.linspace(0, 1, len(sorted_values)))
-            
-            # Plotting the values
-            fig = plt.figure(figsize=(10, 6))
-            sorted_values.plot(kind='barh', color=colors)
-            plt.title("Leaderboard")
-            plt.ylabel("Value")
-            plt.xlabel("Column Name")
-            plt.xticks(rotation=0)
-            plt.grid(axis='x', linestyle='--', alpha=0.7)
-            plt.tight_layout()
+            csv = convert_df(filtered_df)
 
-            st.pyplot(fig)
-
-        # Show winning team name
-        st.subheader(f"Winning team: {winning_team}")
-
-        # Filtering the DataFrame to include only rows with max 'mark' for each 'Team'
-        filtered_df = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
-        
-        filtered_df = filtered_df[['Team','mark']]
-
-        csv = convert_df(filtered_df)
-
-        st.download_button(
-            label="Download marks as CSV",
-            data=csv,
-            file_name='marks.csv',
-            mime='text/csv',
-        )
+            st.download_button(
+                label="Download marks as CSV",
+                data=csv,
+                file_name='marks.csv',
+                mime='text/csv',
+            )
+        except IndexError:
+            st.text('No points yet')
 
         
 

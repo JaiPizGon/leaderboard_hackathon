@@ -175,7 +175,10 @@ def main():
                 entry_empty = False
                 df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
                 for index, col in enumerate(st.session_state.results.columns[1:]):
-                    df_dict[col] = int(st.session_state[col])
+                    if col == 'include_mean':
+                        df_dict[col] = int(st.session_state[col])
+                    else:
+                        df_dict[col] = st.session_state[col]
                     if st.session_state[col] == '':
                         entry_empty = True
                         break
@@ -209,8 +212,9 @@ def main():
     for index, col in enumerate(st.session_state.results.columns[1:-2]):
         with txtColumns[index]:
             st.text_input(col, key=col)
+    with txtColumns[index+1]:
+        st.text_input(st.session_state.results.columns[-1], key=st.session_state.results.columns[-1])
     st.checkbox(st.session_state.results.columns[-2], key=st.session_state.results.columns[-2])
-    st.checkbox(st.session_state.results.columns[-1], key=st.session_state.results.columns[-1])
         
 
 if __name__ == "__main__":
