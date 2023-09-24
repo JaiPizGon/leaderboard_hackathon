@@ -137,17 +137,16 @@ def main():
         'Series #',
         st.session_state.options
     )
-    
 
     # Initialize session state for results if not already present
     if 'results' not in st.session_state:
         # Define columns based on the problem type
         if config['arima_problem_type'] == 'ARMA':
-            df_columns = ['Team', 'p', 'q']
+            df_columns = ['Team', 'p', 'q', 'include_mean', 'lambda']
         elif config['arima_problem_type'] == 'ARIMA':
-            df_columns = ['Team', 'p', 'd', 'q']
+            df_columns = ['Team', 'p', 'd', 'q', 'include_mean', 'lambda']
         elif config['arima_problem_type'] == 'SARIMA':
-            df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f']
+            df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f', 'include_mean', 'lambda']
 
         st.session_state.results = pd.DataFrame(columns=df_columns)
     
@@ -176,7 +175,7 @@ def main():
                 entry_empty = False
                 df_dict = {'Team': team_name, 'Series': option.split(' ')[0]}
                 for index, col in enumerate(st.session_state.results.columns[1:]):
-                    df_dict[col] = st.session_state[col]
+                    df_dict[col] = int(st.session_state[col])
                     if st.session_state[col] == '':
                         entry_empty = True
                         break
@@ -204,12 +203,14 @@ def main():
             
     # Main area
     st.title("Input parameters")
-
+    
     # Text inputs for each parameter
     txtColumns = st.columns(len(st.session_state.results.columns) - 1)
-    for index, col in enumerate(st.session_state.results.columns[1:]):
+    for index, col in enumerate(st.session_state.results.columns[1:-2]):
         with txtColumns[index]:
             st.text_input(col, key=col)
+    st.checkbox(st.session_state.results.columns[-2], key=st.session_state.results.columns[-2])
+    st.checkbox(st.session_state.results.columns[-1], key=st.session_state.results.columns[-1])
         
 
 if __name__ == "__main__":

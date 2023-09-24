@@ -2,9 +2,10 @@ import streamlit as st
 import pandas as pd
 from google.oauth2 import service_account
 import gspread
-from datetime import datetime
+import matplotlib.pyplot as plt
 import bar_chart_race as bcr
 import base64
+import numpy as np
 
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
@@ -78,6 +79,7 @@ def read_series():
 def clear_show_solution():
     st.session_state.show_solution = False
     st.session_state.show_results = False
+    st.session_state.show_leaderboard = False
     return
 
 
@@ -113,11 +115,11 @@ def main():
     if 'results' not in st.session_state:
         # Define columns based on the problem type
         if config['arima_problem_type'] == 'ARMA':
-            df_columns = ['Team', 'p', 'q']
+            df_columns = ['Team', 'p', 'q', 'include_mean', 'lambda']
         elif config['arima_problem_type'] == 'ARIMA':
-            df_columns = ['Team', 'p', 'd', 'q']
+            df_columns = ['Team', 'p', 'd', 'q', 'include_mean', 'lambda']
         elif config['arima_problem_type'] == 'SARIMA':
-            df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f']
+            df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f', 'include_mean', 'lambda']
 
         st.session_state.results = pd.DataFrame(columns=df_columns)
 
@@ -127,6 +129,9 @@ def main():
     
     if 'show_results' not in st.session_state:
         st.session_state.show_results = False
+    
+    if 'show_leaderboard' not in st.session_state:
+        st.session_state.show_leaderboard = False
     
     # Solution area
     # Button for showing solution
@@ -139,12 +144,21 @@ def main():
             st.sidebar.error("Error: wrong admin name or password")
     
     # Button for showing results
-    if st.sidebar.button('Show results'):
+    if st.sidebar.button('Show leaderboard (dynamic)'):
         # Admin check for showing results
         if team_name == admin_account['name'] and password == admin_account['password']:
             st.session_state.show_results = True
         else:
             st.session_state.show_results = False
+            st.sidebar.error("Error: wrong admin name or password")
+    
+    # Button for showing results
+    if st.sidebar.button('Show leaderboard (static)'):
+        # Admin check for showing results
+        if team_name == admin_account['name'] and password == admin_account['password']:
+            st.session_state.show_leaderboard = True
+        else:
+            st.session_state.show_leaderboard = False
             st.sidebar.error("Error: wrong admin name or password")
             
     # Main area
@@ -152,18 +166,20 @@ def main():
 
     # Text inputs for each parameter
     txtColumns = st.columns(len(st.session_state.results.columns) - 1)
-    for index, col in enumerate(st.session_state.results.columns[1:]):
+    for index, col in enumerate(st.session_state.results.columns[1:-2]):
         with txtColumns[index]:
             st.text_input(col, key=col)
+    st.checkbox(st.session_state.results.columns[-2], key=st.session_state.results.columns[-2])
+    st.checkbox(st.session_state.results.columns[-1], key=st.session_state.results.columns[-1])
         
     
     if st.session_state.show_solution:
-        series_solution = series.loc[series['Series'] == option.split(' ')[0], st.session_state.results.columns[1:]]
+        series_solution = st.session_state.series.loc[st.session_state.series['Series'] == option.split(' ')[0], st.session_state.results.columns[1:]]
         new_index = ['Series #' + str(x + 1) for x in series_solution.index.values]
         series_solution.index = new_index
         st.dataframe(pd.DataFrame(series_solution))
     
-    if st.session_state.show_results:
+    if st.session_state.show_results or st.session_state.show_leaderboard:
         previous_results, _, _ = read_previous_results()
         
         # Convert time to datetime
@@ -172,7 +188,7 @@ def main():
         # Merge previous results with the series DataFrame on specific columns
         # This combines the 'Series', 'p', and 'q' columns from both DataFrames
         merged_df = pd.merge(previous_results.reset_index(), st.session_state.series, 
-                            on=['Series', 'p', 'q'], how='left')
+                            on=previous_results.columns[1:-1].tolist(), how='left')
 
         # Fill any NaN values in the 'weight' column with zeros
         # This ensures that all teams have a 'weight' even if they haven't made any attempts
@@ -201,27 +217,49 @@ def main():
         # Pivot the DataFrame so that each 'Team' becomes a column
         df = df.pivot(columns='Team', values='mark')
         
-        # Create bar chart race animation
-        try:
-            html_str = bcr.bar_chart_race(
-                    df.ffill().fillna(0), 
-                    interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
-                    period_fmt='%H:%m'
-                ).data
-        except AttributeError:
-            html_str = bcr.bar_chart_race(
-                    df.ffill().fillna(0), 
-                    interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
-                    period_fmt='%H:%m'
-                )
-            
-        start = html_str.find('base64,') + len('base64,')
-        end = html_str.find('">')
+        if st.session_state.show_results:
+            # Create bar chart race animation
+            try:
+                html_str = bcr.bar_chart_race(
+                        df.ffill().fillna(0), 
+                        interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
+                        period_fmt='%H:%m'
+                    ).data
+            except AttributeError:
+                html_str = bcr.bar_chart_race(
+                        df.ffill().fillna(0), 
+                        interpolate_period=True, steps_per_period=n_steps, title='Team leaderboard evolution',
+                        period_fmt='%H:%m'
+                    )
+                
+            start = html_str.find('base64,') + len('base64,')
+            end = html_str.find('">')
 
-        video = base64.b64decode(html_str[start:end])
-        
-        st.video(video)
-        
+            video = base64.b64decode(html_str[start:end])
+            
+            st.video(video)
+
+        if st.session_state.show_leaderboard:
+            # Identify the last non-NaN value for each column
+            last_non_nan_values = df.apply(lambda col: col.dropna().iloc[-1])
+            # Sort the values in descending order
+            sorted_values = last_non_nan_values.sort_values(ascending=True)
+            
+            # Get distinct colors for each bar using the viridis colormap
+            colors = plt.cm.viridis(np.linspace(0, 1, len(sorted_values)))
+            
+            # Plotting the values
+            fig = plt.figure(figsize=(10, 6))
+            sorted_values.plot(kind='barh', color=colors)
+            plt.title("Leaderboard")
+            plt.ylabel("Value")
+            plt.xlabel("Column Name")
+            plt.xticks(rotation=0)
+            plt.grid(axis='x', linestyle='--', alpha=0.7)
+            plt.tight_layout()
+
+            st.pyplot(fig)
+
         # Show winning team name
         st.subheader(f"Winning team: {winning_team}")
 
