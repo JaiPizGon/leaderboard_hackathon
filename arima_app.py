@@ -121,7 +121,7 @@ def main():
         elif config['arima_problem_type'] == 'ARIMA':
             df_columns = ['Team', 'p', 'd', 'q', 'include_mean', 'lambda']
         elif config['arima_problem_type'] == 'SARIMA':
-            df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 'f', 'include_mean', 'lambda']
+            df_columns = ['Team', 'p', 'd', 'q', 'P', 'D', 'Q', 's', 'include_mean', 'lambda']
 
         st.session_state.results = pd.DataFrame(columns=df_columns)
 
@@ -192,8 +192,8 @@ def main():
         # This combines the 'Series', 'p', and 'q' columns from both DataFrames
         # merged_df = pd.merge(previous_results.reset_index(), st.session_state.series, 
         #                     on=previous_results.columns[1:-2].tolist(), how='left')# Sort both dataframes by the key columns
-        previous_results = previous_results.reset_index().sort_values(by=['Series', 'p', 'q', 'include_mean', 'lambda'])
-        series = st.session_state.series.sort_values(by=['Series', 'p', 'q', 'include_mean', 'lambda'])
+        previous_results = previous_results.reset_index().sort_values(by=previous_results.columns[1:-2].tolist())
+        series = st.session_state.series.sort_values(by=previous_results.columns[2:-2].tolist())
         
         # Cartesian product of the two dataframes
         previous_results['key'] = 1
