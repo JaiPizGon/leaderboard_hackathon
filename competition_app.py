@@ -1,58 +1,13 @@
 import streamlit as st
 import pandas as pd
-from competition_config import config_function
 from google.oauth2 import service_account
 import gspread
+from utils import read_users_file, validate_user
+from datetime import datetime
 
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
 
-# Load config from config.py
-config_file = config_function()
-
-def read_users_file():
-    """
-    Read user data from Google Sheets using Google Sheets API.
-
-    Returns:
-    tuple: A tuple containing two values:
-        - users_data (dict or None): A dictionary containing user data with team names as keys and passwords as values,
-          or None if the spreadsheet or worksheet could not be found.
-        - error_flag (int): An error flag indicating whether an error occurred during accessing the spreadsheet.
-          - 0: No error occurred.
-          - 1: Spreadsheet not found error occurred.
-    """
-    try:
-        spreadsheet = gc.open(config_file['pwd_table'])
-        worksheet = spreadsheet.get_worksheet(0)
-        list_of_dicts = worksheet.get_all_records()
-        
-        # Convert list of dicts to a dictionary
-        users_data = {record['Team']: record['Password'] for record in list_of_dicts}
-        
-        error_flag = 0
-    except gspread.exceptions.SpreadsheetNotFound:
-        users_data = None
-        error_flag = 1
-        
-    return users_data, error_flag
-
-def validate_user(users_data, team_name, password):
-    """
-    Validate user credentials.
-
-    Parameters:
-    users_data (dict): A dictionary containing user data with team names as keys and hashed passwords as values.
-    team_name (str): The team name provided by the user.
-    password (str): The password provided by the user.
-
-    Returns:
-    bool: True if user credentials are valid, False otherwise.
-    """
-    if team_name in users_data:
-        if users_data[team_name] == password:
-            return True
-    return False
 
 def read_data_to_validate():
     """
@@ -67,7 +22,7 @@ def read_data_to_validate():
     
     """
     try:
-        spreadsheet = gc.open(config_file['type_problem'])
+        spreadsheet = gc.open(config['leaderboard_problem_type'])
             
         worksheet = spreadsheet.get_worksheet(0)
         list_of_dicts = worksheet.get_all_records()
@@ -75,12 +30,11 @@ def read_data_to_validate():
         # Convert list of dicts to a DataFrame
         validation_data = pd.DataFrame(list_of_dicts)
         
-        error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
         validation_data = None
-        error_flag = 1
-        
-    return validation_data, error_flag
+    
+    st.session_state.data_to_validate = validation_data
+    return 
 
 def correct_name(data):
     # Get the name of the column
@@ -114,7 +68,7 @@ def calculate_error_metrics(predictions, true_values, team_name, commentary):
     predictions = correct_name(predictions)
     true_values = correct_name(true_values)
     
-    if config_file['type_problem'] == 'regression':
+    if config['leaderboard_problem_type'] == 'regression':
         # Calculate RMSE (Root Mean Squared Error)
         rmse = ((predictions - true_values) ** 2).mean() ** 0.5
         error_metrics['RMSE'] = rmse
@@ -126,7 +80,7 @@ def calculate_error_metrics(predictions, true_values, team_name, commentary):
         # Calculate negative_values (count of negative predictions)
         negative_values = (predictions < 0).sum()
         error_metrics['Negative_Values'] = negative_values
-    elif config_file['type_problem'] == 'classification':
+    elif config['leaderboard_problem_type'] == 'classification':
         # Assuming 'predictions' and 'true_values' are binary (0 or 1) for classification
         correct_predictions = (predictions == true_values)
         accuracy = correct_predictions.mean()
@@ -158,11 +112,11 @@ def read_previous_error_metrics():
     tuple: A tuple containing two values:
         - pd.DataFrame: A pandas DataFrame containing the previous error metrics.
         - error_flag (int): An error flag indicating whether an error occurred during reading the file.
-          - 0: No error occurred.
-          - 1: File not found error occurred.
+            - 0: No error occurred.
+            - 1: File not found error occurred.
     """
     try:
-        spreadsheet = gc.open(config_file['name_GDrive'])
+        spreadsheet = gc.open(google_sheets['name_leaderboard'])
             
         worksheet = spreadsheet.get_worksheet(0)
         list_of_dicts = worksheet.get_all_records(numericise_ignore=['all'])
@@ -180,7 +134,8 @@ def read_previous_error_metrics():
 
 
 def main():
-    st.title(config_file['title'])
+    
+    st.title(f"{config['leaderboard_problem_type'].capitalize()} Hackathon Machine Learning")
     
     # Sidebar
     st.sidebar.title("Upload your predictions")
@@ -191,29 +146,37 @@ def main():
     uploaded_file = st.sidebar.file_uploader("Choose CSV File", type=['csv'])
     commentary = st.sidebar.text_area("Brief description of your methodology")
     
+    # Read team names and passwords
+    if 'users_data' not in st.session_state:
+        read_users_file()
+        
+    # Read data to validate
+    if 'data_to_validate' not in st.session_state:
+        read_data_to_validate()
+    
+    if 'last_refresh_time' not in st.session_state:
+        st.session_state.last_refresh_time = datetime.now()
+        
+    if 'not_shown' not in st.session_state:
+        st.session_state.not_shown = True
+    
     # Buttons
     if st.sidebar.button("Submit"):
         
-        # Read user data:
-        users_data, users_data_error = read_users_file()
-        if users_data_error:
-            st.sidebar.error("Error: users file could not be read.")
-
-        else:
-            # Validate user
-            if validate_user(users_data, team_name, password):
-
-                # Read uploaded file
-                if uploaded_file:
-                    predictions = pd.read_csv(uploaded_file)
+        # Handling code after clicking submit
+        # Validate user
+        if validate_user(team_name, password):
+            # Read uploaded file
+            if uploaded_file:
+                predictions = pd.read_csv(uploaded_file)
+                
+                # Read validation data
+                if st.session_state.data_to_validate is None:
+                    st.sidebar.error("Error: Validation data file not found.")
                     
-                    # Read validation data
-                    data_to_validate, val_data_error = read_data_to_validate()
-                    if val_data_error:
-                        st.sidebar.error("Error: Validation data file not found.")
-                        
-                    else:
-                        error_metrics = calculate_error_metrics(predictions, data_to_validate, team_name, commentary)
+                else:
+                    error_metrics = calculate_error_metrics(predictions, st.session_state.data_to_validate, 
+                                                            team_name, commentary)
                     
                     # Update leaderboard and store error metrics
                     st.sidebar.write("Updating leaderboard and storing error metrics...")
@@ -225,41 +188,49 @@ def main():
                     except KeyError:
                         team_tries = 0
                         
-                    if team_tries < config_file['n_tries']:
+                    if team_tries < config['n_tries']:
                         if previous_error_flag:
                             st.sidebar.error("Error: Leaderboard could not be loaded.")
                         else:
                             try:
                                 worksheet.append_row(error_metrics.values.tolist()[0])
-                                st.sidebar.success(f"Leaderboard updated. You have {config_file['n_tries'] - team_tries - 1} tries left.")
+                                st.sidebar.success(f"Leaderboard updated. You have {config['n_tries'] - team_tries - 1} tries left.")
+                                st.session_state.not_shown = True
                             except:
                                 st.sidebar.error("Error: Leaderboard could not be updated.")
                     else:
-                        st.sidebar.error(f"Error: team has exceeded the number of tries ({config_file['n_tries']})")
-                else:
-                    st.sidebar.error("Error: File to be uploaded not found.")
+                        st.sidebar.error(f"Error: team has exceeded the number of tries ({config['n_tries']})")
             else:
-                st.sidebar.error("Error: Incorrect user or password.")
+                st.sidebar.error("Error: File to be uploaded not found.")
+        else:
+            st.sidebar.error("Error: Incorrect user or password.")
     
-    if st.sidebar.button("Refresh Leaderboard"):
-        # Refresh leaderboard and display
-        st.sidebar.write("Refreshing leaderboard...")
-        previous_metrics, _, previous_error_flag = read_previous_error_metrics()
-        if previous_error_flag:
-            st.sidebar.error("Error: Leaderboard could not be loaded.")
     
     # Main area
     st.title("Leaderboard")
-    try:
-        st.dataframe(pd.DataFrame(previous_metrics, columns=['Team'] + config_file['col_show']).sort_values(by=config_file['col_show'][0], ascending=False))
-    except UnboundLocalError:
-        previous_metrics, _, previous_error_flag = read_previous_error_metrics()
-        if previous_error_flag:
-            st.sidebar.error("Error: Leaderboard could not be loaded.")
-        else:
-            st.dataframe(pd.DataFrame(previous_metrics, columns=['Team'] + config_file['col_show']).sort_values(by=config_file['col_show'][0], ascending=False))
-            st.sidebar.write("Leaderboard refreshed.")
+    
+    if st.sidebar.button("Refresh Leaderboard"):
+        seconds_passed = (datetime.now()-st.session_state.last_refresh_time).total_seconds() 
+        submit_time_enabled = (seconds_passed / 60 > config['n_minutes'])
+        submit_admin_enabled = (team_name == admin_account['name'] and password == admin_account['password'])
         
+        if submit_time_enabled or submit_admin_enabled or st.session_state.not_shown:
+            # Update last refresh time
+            st.session_state.last_refresh_time = datetime.now()
+            
+            # Refresh leaderboard and display
+            st.sidebar.write("Refreshing leaderboard...")
+            previous_metrics, _, previous_error_flag = read_previous_error_metrics()
+            st.session_state.previous_metrics = previous_metrics
+            st.session_state.not_shown = False
+            st.sidebar.write("Leaderboard refreshed.")
+            if previous_error_flag:
+                st.sidebar.error("Error: Leaderboard could not be loaded.")
+        else:
+            st.sidebar.warning(f"You must wait {config['n_minutes'] * 60 - int(seconds_passed)} seconds to refresh again.")    
+
+    if 'previous_metrics' in st.session_state:
+        st.dataframe(pd.DataFrame(st.session_state.previous_metrics, columns=['Team'] + col_show).sort_values(by=col_show[0], ascending=False))
 
 if __name__ == "__main__":
 
@@ -271,4 +242,19 @@ if __name__ == "__main__":
     )
     gc = gspread.authorize(credentials)
     
+    # Read admin account configuration
+    admin_account = st.secrets['admin_account']
+    
+    ## Read google sheet configuration
+    google_sheets = st.secrets["google_sheets"]
+    
+    # Read config
+    config = st.secrets['config']
+    
+    # Define columns to show in leaderboard based on problem type 
+    if config['leaderboard_problem_type'] == 'regression':
+        col_show = ["RMSE", "MAPE", "Negative_Values"]
+    else:
+        col_show = ["Accuracy", 'Sensitivity', 'Specificity']
+        
     main()
