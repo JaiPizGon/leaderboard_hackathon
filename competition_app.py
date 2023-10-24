@@ -4,6 +4,8 @@ from google.oauth2 import service_account
 import gspread
 from utils import read_users_file, validate_user
 from datetime import datetime
+from sklearn.metrics import confusion_matrix
+from datetime import datetime
 
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
@@ -81,24 +83,26 @@ def calculate_error_metrics(predictions, true_values, team_name, commentary):
         negative_values = (predictions < 0).sum()
         error_metrics['Negative_Values'] = negative_values
     elif config['leaderboard_problem_type'] == 'classification':
-        # Assuming 'predictions' and 'true_values' are binary (0 or 1) for classification
-        correct_predictions = (predictions == true_values)
-        accuracy = correct_predictions.mean()
-        error_metrics['Accuracy'] = accuracy[0]
+        
+        ## Obtain confusion matrix 
+        cm = confusion_matrix(true_values, predictions)
+
+        # Total of predictions
+        t = predictions.shape[0]
+        
+        # Accuracy
+        error_metrics['Accuracy'] = (cm[0, 0] + cm[1, 1]) / t
 
         # Calculate sensitivity (True Positive Rate)
-        true_positive = correct_predictions.sum()
-        sensitivity = true_positive / len(true_values[true_values == 1])
-        error_metrics['Sensitivity'] = sensitivity[0]
+        error_metrics['Sensitivity'] = cm[0, 0]/(cm[0, 0] + cm[0, 1])
 
         # Calculate specificity (True Negative Rate)
-        true_negative = len(predictions[correct_predictions]) - true_positive
-        specificity = true_negative / len(true_values[true_values == 0])
-        error_metrics['Specificity'] = specificity[0]
+        error_metrics['Specificity'] = cm[1, 1] / (cm[1, 0] + cm[1, 1])
 
     # Create a DataFrame with calculated error metrics and team information
     error_metrics['Team'] = team_name
     error_metrics['Commentary'] = commentary
+    error_metrics['Time'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
     error_metrics_df = pd.DataFrame([error_metrics])
 
     return error_metrics_df
