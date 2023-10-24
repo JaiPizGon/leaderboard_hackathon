@@ -83,7 +83,6 @@ def calculate_error_metrics(predictions, true_values, team_name, commentary):
         negative_values = (predictions < 0).sum()
         error_metrics['Negative_Values'] = negative_values
     elif config['leaderboard_problem_type'] == 'classification':
-        
         ## Obtain confusion matrix 
         cm = confusion_matrix(true_values, predictions)
 
