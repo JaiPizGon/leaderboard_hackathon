@@ -8,6 +8,7 @@ from sklearn.metrics import confusion_matrix
 from datetime import datetime
 import numpy as np
 from statsmodels.tsa.stattools import acf
+import time
 
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
@@ -195,6 +196,13 @@ def main():
     uploaded_file = st.sidebar.file_uploader("Choose predictions File", type=['csv', 'dat'])
     commentary = st.sidebar.text_area("Brief description of your methodology")
     
+    # Obtain if it is admin account
+    admin_enabled = (team_name == admin_account['name'] and password == admin_account['password'])
+    
+    # Enable auto refresh
+    auto_refresh = st.sidebar.checkbox('Enable auto-refresh', disabled=not admin_enabled)
+    refresh_interval = st.sidebar.number_input('Refresh interval (seconds)', min_value=1, value=30, disabled=not admin_enabled)
+    
     # Read team names and passwords
     if 'users_data' not in st.session_state:
         read_users_file()
@@ -260,12 +268,12 @@ def main():
     # Main area
     st.title("Leaderboard")
     
-    if st.sidebar.button("Refresh Leaderboard"):
+    leaderboard_placeholder = st.empty()
+    if st.sidebar.button("Refresh Leaderboard") or auto_refresh:
         seconds_passed = (datetime.now()-st.session_state.last_refresh_time).total_seconds() 
-        submit_time_enabled = (seconds_passed / 60 > config['n_minutes'])
-        submit_admin_enabled = (team_name == admin_account['name'] and password == admin_account['password'])
+        submit_time_enabled = (seconds_passed / 60 > config['n_minutes']) or (auto_refresh and (seconds_passed > refresh_interval))
         
-        if submit_time_enabled or submit_admin_enabled or st.session_state.not_shown:
+        if submit_time_enabled or admin_enabled or st.session_state.not_shown:
             # Update last refresh time
             st.session_state.last_refresh_time = datetime.now()
             
@@ -278,12 +286,17 @@ def main():
             if previous_error_flag:
                 st.sidebar.error("Error: Leaderboard could not be loaded.")
         else:
-            st.sidebar.warning(f"You must wait {config['n_minutes'] * 60 - int(seconds_passed)} seconds to refresh again.")    
+            st.sidebar.warning(f"You must wait {config['n_minutes'] * 60 - int(seconds_passed)} seconds to refresh again.")  
+        
 
     if 'previous_metrics' in st.session_state:
         prev_metrics = pd.DataFrame(st.session_state.previous_metrics, columns=['Team'] + col_show)
         prev_metrics.iloc[:, 1:] = prev_metrics.iloc[:, 1:].map(convert_to_numeric)
-        st.dataframe(prev_metrics.sort_values(by=col_show[0], ascending= not (config['leaderboard_problem_type'] == 'classification')).reset_index(drop=True))
+        leaderboard_placeholder.dataframe(prev_metrics.sort_values(by=col_show[0], ascending= not (config['leaderboard_problem_type'] == 'classification')).reset_index(drop=True))
+        
+    if auto_refresh:
+        time.sleep(refresh_interval)
+        st.rerun()
 
 if __name__ == "__main__":
 

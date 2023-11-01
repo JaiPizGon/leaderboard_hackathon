@@ -6,6 +6,8 @@ import matplotlib.pyplot as plt
 import bar_chart_race as bcr
 import base64
 import numpy as np
+from datetime import datetime
+import time
 
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
@@ -95,6 +97,9 @@ def main():
     # Collect user inputs for team name and password
     team_name = st.sidebar.text_input("Team name")
     password = st.sidebar.text_input("Password", type="password")
+    
+    # Obtain if it is admin account
+    admin_enabled = (team_name == admin_account['name'] and password == admin_account['password'])
 
     # Read series and check for errors
     if 'options' not in st.session_state:
@@ -134,6 +139,9 @@ def main():
     
     if 'show_leaderboard' not in st.session_state:
         st.session_state.show_leaderboard = False
+        
+    if 'last_refresh_time' not in st.session_state:
+        st.session_state.last_refresh_time = datetime.now()
     
     # Solution area
     # Button for showing solution
@@ -162,6 +170,10 @@ def main():
         else:
             st.session_state.show_leaderboard = False
             st.sidebar.error("Error: wrong admin name or password")
+    
+    # Enable auto refresh
+    auto_refresh = st.sidebar.checkbox('Enable auto-refresh', disabled=not admin_enabled)
+    refresh_interval = st.sidebar.number_input('Refresh interval (seconds)', min_value=1, value=30, disabled=not admin_enabled)
             
     # Main area
     st.title("Input parameters")
@@ -181,8 +193,10 @@ def main():
         new_index = ['Series #' + str(x + 1) for x in series_solution.index.values]
         series_solution.index = new_index
         st.dataframe(pd.DataFrame(series_solution))
+        
+    seconds_passed = (datetime.now()-st.session_state.last_refresh_time).total_seconds() 
     
-    if st.session_state.show_results or st.session_state.show_leaderboard:
+    if st.session_state.show_results or st.session_state.show_leaderboard or (auto_refresh and seconds_passed > refresh_interval):
         previous_results, _, _ = read_previous_results()
         
         # Convert time to datetime
@@ -281,7 +295,7 @@ def main():
                 
                 st.video(video)
 
-            if st.session_state.show_leaderboard:
+            if st.session_state.show_leaderboard or auto_refresh:
                 # Identify the last non-NaN value for each column
                 last_non_nan_values = df.apply(lambda col: col.dropna().iloc[-1])
                 # Sort the values in descending order
@@ -304,6 +318,9 @@ def main():
 
             # Show winning team name
             st.subheader(f"Winning team: {winning_team}")
+            
+            # Update last refresh time
+            st.session_state.last_refresh_time = datetime.now()
 
             # Filtering the DataFrame to include only rows with max 'mark' for each 'Team'
             filtered_df = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
@@ -320,7 +337,10 @@ def main():
             )
         except IndexError:
             st.text('No points yet')
-
+    
+    if auto_refresh:
+        time.sleep(refresh_interval)
+        st.rerun()
         
 
 if __name__ == "__main__":
