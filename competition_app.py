@@ -26,7 +26,7 @@ def read_data_to_validate():
     
     """
     try:
-        spreadsheet = gc.open(config['leaderboard_problem_type'])
+        spreadsheet = gc.open(config['leaderboard_validation_file'])
             
         worksheet = spreadsheet.get_worksheet(0)
         list_of_dicts = worksheet.get_all_records(numericise_ignore=['all'])
@@ -192,7 +192,7 @@ def main():
     # User inputs
     team_name = st.sidebar.text_input("Team name")
     password = st.sidebar.text_input("Password", type="password")
-    uploaded_file = st.sidebar.file_uploader("Choose predicitons File", type=['csv', 'dat'])
+    uploaded_file = st.sidebar.file_uploader("Choose predictions File", type=['csv', 'dat'])
     commentary = st.sidebar.text_area("Brief description of your methodology")
     
     # Read team names and passwords
@@ -281,7 +281,9 @@ def main():
             st.sidebar.warning(f"You must wait {config['n_minutes'] * 60 - int(seconds_passed)} seconds to refresh again.")    
 
     if 'previous_metrics' in st.session_state:
-        st.dataframe(pd.DataFrame(st.session_state.previous_metrics, columns=['Team'] + col_show).sort_values(by=col_show[0], ascending= not (config['leaderboard_problem_type'] == 'classification')))
+        prev_metrics = pd.DataFrame(st.session_state.previous_metrics, columns=['Team'] + col_show)
+        prev_metrics.iloc[:, 1:] = prev_metrics.iloc[:, 1:].map(convert_to_numeric)
+        st.dataframe(prev_metrics.sort_values(by=col_show[0], ascending= not (config['leaderboard_problem_type'] == 'classification')).reset_index(drop=True))
 
 if __name__ == "__main__":
 
