@@ -74,17 +74,16 @@ def calculate_error_metrics(predictions, true_values, team_name, commentary):
     
     if config['leaderboard_problem_type'] == 'regression':
         residuals = predictions.values - true_values.values
-        # Calculate RMSE (Root Mean Squared Error)
-        rmse = np.sqrt(np.mean((residuals)**2))
-        error_metrics['RMSE'] = rmse
+        # RMSE (Root Mean Squared Error)
+        error_metrics['RMSE'] = np.sqrt(np.mean((residuals)**2))
 
         # Calculate MAPE (Mean Absolute Percentage Error)
-        mape = ((abs(residuals) / true_values) * 100).mean()
-        error_metrics['MAPE'] = mape
+        error_metrics['MAPE'] = np.mean(np.abs((residuals) / true_values)) * 100
 
         # Calculate negative_values (count of negative predictions)
-        negative_values = (predictions < 0).sum()
+        negative_values = (predictions < 0).sum()[0]
         error_metrics['Negative_Values'] = negative_values
+        
     elif config['leaderboard_problem_type'] == 'classification':
         predictions = correct_name(predictions)
         true_values = correct_name(true_values)
