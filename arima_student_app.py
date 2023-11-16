@@ -114,7 +114,7 @@ def main():
                 "P",
                 "D",
                 "Q",
-                "f",
+                "s",
                 "include_mean",
                 "lambda",
             ]
