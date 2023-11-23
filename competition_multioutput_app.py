@@ -347,6 +347,9 @@ def main():
         def format_float(val):
             return "{:.3f}".format(val)
 
+        def format_integer(val):
+            return "{:.0f}".format(val)
+
         styles = [
             dict(selector="th", props=th_props),
             dict(selector="td", props=td_props),
@@ -374,9 +377,8 @@ def main():
                     ascending=True,
                 )
                 .set_index("Team")
-                .style.format(
-                    format_float, subset=cols
-                )  # Apply formatting to specific columns
+                .style.format(format_float, subset=cols[0])
+                .format(format_integer, subset=cols[1:])
                 .set_table_styles(styles)
             )
 
