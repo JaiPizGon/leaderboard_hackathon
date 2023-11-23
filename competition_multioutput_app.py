@@ -57,7 +57,7 @@ def correct_name(data):
     return result_df
 
 
-def calculate_error_metrics(predictions, true_values, output_name):
+def calculate_error_metrics(predictions, true_values, output_name, capacity):
     """
     Calculate error metrics based on the problem type.
 
@@ -65,6 +65,7 @@ def calculate_error_metrics(predictions, true_values, output_name):
     predictions (pd.Series or pd.DataFrame): Predicted values.
     true_values (pd.Series or pd.DataFrame): True values.
     output_name (str): name of the output
+    capacity (float): maximum capacity of the source
 
     Returns:
     pd.DataFrame: A pandas DataFrame containing calculated error metrics and team information.
@@ -73,9 +74,7 @@ def calculate_error_metrics(predictions, true_values, output_name):
 
     error_metrics[f"{output_name}_MAE"] = np.mean(np.abs(predictions - true_values))
     error_metrics[f"{output_name}_NV"] = predictions[predictions < 0].count()
-    error_metrics[f"{output_name}_OV"] = predictions[
-        predictions > endesa["capacity"]
-    ].count()
+    error_metrics[f"{output_name}_OV"] = predictions[predictions > capacity].count()
     error_metrics[f"{output_name}_score"] = (
         error_metrics[f"{output_name}_MAE"]
         + endesa["nv_penalization"] * error_metrics[f"{output_name}_NV"]
@@ -121,9 +120,9 @@ def convert_to_numeric(s):
         # Replace commas with periods, then try to convert to a float
         return float(s.replace(",", "."))
     except ValueError:
-        # If conversion fails, return None
+        # If conversion fails, return the value itself
         print(f"Conversion failed for value: {s}")
-        return None
+        return s
 
 
 def join_columns(row):
@@ -135,13 +134,18 @@ def join_columns(row):
 
 
 def main():
-    st.title(config["title"])
+    st.image(
+        "https://github.com/JaiPizGon/leaderboard_hackathon/blob/master/resources/catedra/catedra-logo.png?raw=true",
+        use_column_width=True,
+    )
+    # st.title(config["title"])
 
     # Sidebar
     st.sidebar.title("Upload your predictions")
 
     # User inputs
     team_name = st.sidebar.text_input("Team name")
+    team_alias = st.sidebar.text_input("Team alias")
     password = st.sidebar.text_input("Password", type="password")
     uploaded_file = st.sidebar.file_uploader(
         "Choose predictions File", type=["csv", "dat"]
@@ -180,115 +184,132 @@ def main():
         # Handling code after clicking submit
         # Validate user
         if validate_user(team_name, password):
-            # Read uploaded file
-            if uploaded_file:
-                predictions = pd.read_csv(
-                    uploaded_file, header=None, index_col=False, sep=";"
-                )
-
-                if predictions.shape[1] != st.session_state.n_outputs:
-                    st.sidebar.error(
-                        f"Error: predictions have {predictions.shape[1]} columns but {st.session_state.n_outputs} columns were expected"
+            previous_metrics, _, previous_error_flag = read_previous_error_metrics()
+            st.session_state.previous_metrics = previous_metrics
+            if (team_alias != "") and (team_alias not in previous_metrics["Alias"]):
+                # Read uploaded file
+                if uploaded_file:
+                    predictions = pd.read_csv(
+                        uploaded_file, header=None, index_col=False, sep=";"
                     )
 
-                elif predictions.shape[0] != st.session_state.data_to_validate.shape[0]:
-                    st.sidebar.error(
-                        f"Error: predictions have {predictions.shape[0]} rows but {st.session_state.data_to_validate.shape[0]} rows were expected"
-                    )
+                    if predictions.shape[1] != st.session_state.n_outputs:
+                        st.sidebar.error(
+                            f"Error: predictions have {predictions.shape[1]} columns but {st.session_state.n_outputs} columns were expected"
+                        )
 
-                else:
-                    # Convert all predictions to numeric
-                    predictions = predictions.map(convert_to_numeric)
-
-                    # Read validation data
-                    if st.session_state.data_to_validate is None:
-                        st.sidebar.error("Error: Validation data file not found.")
+                    elif (
+                        predictions.shape[0]
+                        != st.session_state.data_to_validate.shape[0]
+                    ):
+                        st.sidebar.error(
+                            f"Error: predictions have {predictions.shape[0]} rows but {st.session_state.data_to_validate.shape[0]} rows were expected"
+                        )
 
                     else:
-                        # Check if team has not send more than n_tries
-                        (
-                            previous_metrics,
-                            worksheet,
-                            previous_error_flag,
-                        ) = read_previous_error_metrics()
-                        try:
-                            team_tries = previous_metrics["Team"].value_counts()[
-                                team_name
-                            ]
-                        except KeyError:
-                            team_tries = 0
+                        # Convert all predictions to numeric
+                        predictions = predictions.map(convert_to_numeric)
 
-                        if team_tries < config["n_tries"]:
-                            error_metrics = {}
-                            mae_score = 0
-                            for o in range(st.session_state.n_outputs):
-                                o_error_metrics = calculate_error_metrics(
-                                    predictions.iloc[:, o],
-                                    st.session_state.data_to_validate.iloc[:, o],
-                                    st.session_state.data_to_validate.columns[o],
-                                )
-                                mae_score += o_error_metrics[
-                                    f"{st.session_state.data_to_validate.columns[o]}_score"
-                                ]
-                                error_metrics.update(o_error_metrics)
+                        # Read validation data
+                        if st.session_state.data_to_validate is None:
+                            st.sidebar.error("Error: Validation data file not found.")
 
-                            # Calculate global score
-                            error_metrics["Score"] = mae_score
-
-                            # Create a DataFrame with calculated error metrics and team information
-                            error_metrics["Team"] = team_name
-
-                            # error_metrics["Commentary"] = commentary
-                            error_metrics["Time"] = datetime.now().strftime(
-                                "%d/%m/%Y %H:%M:%S"
-                            )
-
-                            error_metrics_df = pd.DataFrame([error_metrics])
-
-                            # Update leaderboard and store error metrics
-                            st.sidebar.write(
-                                "Updating leaderboard and storing error metrics..."
-                            )
-
-                            if previous_error_flag:
-                                st.sidebar.error(
-                                    "Error: Leaderboard could not be loaded."
-                                )
-
-                            else:
-                                try:
-                                    worksheet.append_row(
-                                        error_metrics_df.fillna(0.0).values.tolist()[0]
-                                    )
-                                    st.sidebar.success(
-                                        f"Leaderboard updated. You have {config['n_tries'] - team_tries - 1} tries left."
-                                    )
-                                    st.session_state.not_shown = True
-
-                                except:
-                                    st.sidebar.error(
-                                        "Error: Leaderboard could not be updated."
-                                    )
                         else:
-                            st.sidebar.error(
-                                f"Error: team has exceeded the number of tries ({config['n_tries']})"
-                            )
+                            # Check if team has not send more than n_tries
+                            (
+                                previous_metrics,
+                                worksheet,
+                                previous_error_flag,
+                            ) = read_previous_error_metrics()
+                            try:
+                                team_tries = previous_metrics["Team"].value_counts()[
+                                    team_name
+                                ]
+                            except KeyError:
+                                team_tries = 0
+
+                            if team_tries < config["n_tries"]:
+                                error_metrics = {}
+                                mae_score = 0
+                                for o in range(st.session_state.n_outputs):
+                                    o_error_metrics = calculate_error_metrics(
+                                        predictions.iloc[:, o],
+                                        st.session_state.data_to_validate.iloc[:, o],
+                                        st.session_state.data_to_validate.columns[o],
+                                        endesa["capacity"][o],
+                                    )
+                                    mae_score += o_error_metrics[
+                                        f"{st.session_state.data_to_validate.columns[o]}_score"
+                                    ]
+                                    error_metrics.update(o_error_metrics)
+
+                                # Calculate global score
+                                error_metrics["Score"] = mae_score
+
+                                # Create a DataFrame with calculated error metrics and team information
+                                error_metrics["Team"] = team_name
+
+                                # error_metrics["Commentary"] = commentary
+                                error_metrics["Time"] = datetime.now().strftime(
+                                    "%d/%m/%Y %H:%M:%S"
+                                )
+
+                                error_metrics["Alias"] = team_alias
+
+                                error_metrics_df = pd.DataFrame([error_metrics])
+
+                                # Update leaderboard and store error metrics
+                                st.sidebar.write(
+                                    "Updating leaderboard and storing error metrics..."
+                                )
+
+                                if previous_error_flag:
+                                    st.sidebar.error(
+                                        "Error: Leaderboard could not be loaded."
+                                    )
+
+                                else:
+                                    try:
+                                        worksheet.append_row(
+                                            error_metrics_df.fillna(
+                                                0.0
+                                            ).values.tolist()[0]
+                                        )
+                                        st.sidebar.success(
+                                            f"Leaderboard updated. You have {config['n_tries'] - team_tries - 1} tries left."
+                                        )
+                                        st.session_state.not_shown = True
+
+                                    except:
+                                        st.sidebar.error(
+                                            "Error: Leaderboard could not be updated."
+                                        )
+                            else:
+                                st.sidebar.error(
+                                    f"Error: team has exceeded the number of tries ({config['n_tries']})"
+                                )
+                elif team_alias != "":
+                    st.sidebar.error(
+                        "Error: Choose a different alias, there is already a team with this one."
+                    )
+                else:
+                    st.sidebar.error("Error: You must submit an alias.")
             else:
                 st.sidebar.error("Error: File to be uploaded not found.")
         else:
             st.sidebar.error("Error: Incorrect user or password.")
 
     # Main area
-    st.title("Leaderboard")
+    # st.title("Leaderboard")
 
-    total_columns = sum(len(cols) + 1 for cols in endesa["col_show"])
-    relative_widths = [(len(cols) + 1) / total_columns for cols in endesa["col_show"]]
+    total_columns = sum(len(cols) + 3 for cols in endesa["col_show"])
+    relative_widths = [(len(cols) + 3) / total_columns for cols in endesa["col_show"]]
 
     # Apply the CSS style
     leaderboard_columns = st.columns(
         # st.session_state.n_outputs + 1,
         spec=relative_widths,
-        gap="large",
+        gap="medium",
     )
 
     if st.sidebar.button("Refresh Leaderboard") or auto_refresh:
@@ -319,7 +340,7 @@ def main():
     if "previous_metrics" in st.session_state:
         prev_metrics = pd.DataFrame(
             st.session_state.previous_metrics,
-            columns=["Team"]
+            columns=["Team", "Alias"]
             + [item for sublist in endesa["col_show"] for item in sublist],
         )
         # Check if several rows for a single team must be displayed in leaderboard
@@ -368,15 +389,26 @@ def main():
                 leaderboard_columns[i].write(
                     f"<h2>Global Leaderboard</h2>", unsafe_allow_html=True
                 )  # Make the title bold
+            pm = prev_metrics[["Alias"] + cols]
+            cols = [col.split("_")[0] for col in cols]
+            pm.columns = ["Alias"] + cols
+
+            # Define a function to truncate values to a maximum length
+            def truncate_string(s, max_length):
+                return s[:max_length]
+
+            # Truncate values in the "Alias" column
+            pm["Alias"] = pm["Alias"].apply(
+                lambda x: truncate_string(x, config["max_alias_length"])
+            )
 
             # Format the DataFrame values to three decimal places
             df_show = (
-                prev_metrics[["Team"] + cols]
-                .sort_values(
+                pm.sort_values(
                     by=cols[-1],
                     ascending=True,
                 )
-                .set_index("Team")
+                .set_index("Alias")
                 .style.format(format_float, subset=cols[0])
                 .format(format_integer, subset=cols[1:])
                 .set_table_styles(styles)
