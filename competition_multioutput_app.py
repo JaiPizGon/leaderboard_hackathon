@@ -79,8 +79,9 @@ def calculate_error_metrics(predictions, true_values, output_name):
     error_metrics[f"{output_name}_score"] = (
         error_metrics[f"{output_name}_MAE"]
         + endesa["nv_penalization"] * error_metrics[f"{output_name}_NV"]
-        + endesa["ov_penalization"] * error_metrics[f"{output_name}_OV"],
+        + endesa["ov_penalization"] * error_metrics[f"{output_name}_OV"]
     )
+
     return error_metrics
 
 
