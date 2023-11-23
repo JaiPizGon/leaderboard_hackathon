@@ -134,7 +134,7 @@ def join_columns(row):
 
 
 def main():
-    st.title(f"Datathon Machine Learning Endesa & ICAI")
+    st.title(config["title"])
 
     # Sidebar
     st.sidebar.title("Upload your predictions")
