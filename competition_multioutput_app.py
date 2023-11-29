@@ -144,7 +144,7 @@ def main():
     st.sidebar.title("Upload your predictions")
 
     # User inputs
-    team_name = st.sidebar.text_input("Team name")
+    team_name = st.sidebar.text_input("Team number")
     team_alias = st.sidebar.text_input("Team alias")
     password = st.sidebar.text_input("Password", type="password")
     uploaded_file = st.sidebar.file_uploader(
@@ -402,18 +402,36 @@ def main():
                 lambda x: truncate_string(x, config["max_alias_length"])
             )
 
-            # Format the DataFrame values to three decimal places
-            df_show = (
-                pm.sort_values(
-                    by=cols[-1],
-                    ascending=True,
+            if pm.shape[1] > 2:
+                pm["score"] = (
+                    pm[cols[0]]
+                    + endesa["nv_penalization"] * pm[cols[1]]
+                    + endesa["ov_penalization"] * pm[cols[2]]
                 )
-                .set_index("Alias")
-                .style.format(format_float, subset=cols[0])
-                .format(format_integer, subset=cols[1:])
-                .set_table_styles(styles)
-            )
 
+                # Format the DataFrame values to three decimal places
+                df_show = (
+                    pm.sort_values(
+                        by="score",
+                        ascending=True,
+                    )
+                    .drop(columns=["score"])
+                    .set_index("Alias")
+                    .style.format(format_float, subset=cols[0])
+                    .format(format_integer, subset=cols[1:])
+                    .set_table_styles(styles)
+                )
+            else:
+                df_show = (
+                    pm.sort_values(
+                        by=cols[0],
+                        ascending=True,
+                    )
+                    .set_index("Alias")
+                    .style.format(format_float, subset=cols[0])
+                    .format(format_integer, subset=cols[1:])
+                    .set_table_styles(styles)
+                )
             leaderboard_columns[i].table(df_show)
 
     if auto_refresh:
