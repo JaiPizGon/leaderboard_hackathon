@@ -61,7 +61,6 @@ Pillow==9.5.0
 pip==23.2.1
 prompt-toolkit==3.0.39
 protobuf==4.24.2
-psutil==5.9.0
 pure-eval==0.2.2
 py==1.11.0
 pyarrow==13.0.0
