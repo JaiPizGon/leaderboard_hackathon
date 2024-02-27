@@ -202,7 +202,7 @@ def join_columns(row):
 
 def main():
     st.title(
-        f"{config['leaderboard_problem_type'].capitalize()} Hackathon Machine Learning"
+        f"{config['title']}"
     )
 
     # Sidebar
