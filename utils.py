@@ -31,7 +31,7 @@ def read_users_file():
         list_of_dicts = worksheet.get_all_records()
         
         # Convert list of dicts to a dictionary
-        users_data = {record['Team']: record['Password'] for record in list_of_dicts}
+        users_data = {str(record['Team']): record['Password'] for record in list_of_dicts}
         
     except gspread.exceptions.SpreadsheetNotFound:
         users_data = None
