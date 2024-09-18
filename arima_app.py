@@ -261,12 +261,6 @@ def main():
             # Filter the resulting dataframe based on conditions
             idx = (
                 (cartesian_product["Series_x"] == cartesian_product["Series_y"])
-                & (cartesian_product["p_x"] == cartesian_product["p_y"])
-                & (cartesian_product["q_x"] == cartesian_product["q_y"])
-                & (
-                    cartesian_product["include_mean_x"]
-                    == cartesian_product["include_mean_y"]
-                )
                 & (
                     (
                         cartesian_product["lambda_x"] - cartesian_product["lambda_y"]
@@ -274,33 +268,24 @@ def main():
                     <= config["lambda_tol"]
                 )
             )
+            for col in st.session_state.results.columns[1:-1]:
+                idx &= cartesian_product[col + "_x"] == cartesian_product[col + "_y"]
+                
             merged_df = cartesian_product.loc[idx, :]
 
             # Drop duplicated columns and rename columns to their original names
             merged_df = merged_df.drop(
-                columns=["Series_y", "p_y", "q_y", "include_mean_y"]
+                columns=["Series_y"] + [col + "_y" for col in st.session_state.results.columns[1:]]
             )
             merged_df.columns = [col.replace("_x", "") for col in merged_df.columns]
 
-            merged_df = merged_df.drop(columns=["lambda", "weight", "index"])
-            merged_df = merged_df.rename(columns={"lambda_y": "lambda"})
+            merged_df = merged_df[["Time", "Series"] + list(st.session_state.results.columns) + ["weight"]]
             previous_results = previous_results.drop(columns=["key", "index"])
             series = series.drop(columns=["key"])
 
-            # Save marks
-            merged_df = pd.merge(
-                merged_df,
-                series,
-                on=previous_results.columns[1:-1].tolist(),
-                how="left",
-            )
-
-            # Fill any NaN values in the 'weight' column with zeros
-            # This ensures that all teams have a 'weight' even if they haven't made any attempts
-            merged_df["weight"].fillna(0, inplace=True)
-
             # Create a 'mark' column to hold the cumulative sum of 'weight' for each team
             # This will be used for scoring, and is multiplied by 100 for percentage representation
+            merged_df = merged_df.sort_values(by=["Team", "Time", "Series"], ascending=[False, True, True])
             merged_df["mark"] = merged_df.groupby("Team")["weight"].cumsum() * 100
 
             # Re-set the index of the merged DataFrame to 'Time'
@@ -324,10 +309,7 @@ def main():
             df.reset_index(inplace=True)
 
             # Concatenate this to result_df
-            df = pd.concat(
-                [df, missing_teams[["Team", "mark"]].drop_duplicates()],
-                ignore_index=True,
-            )
+            df = pd.concat([df, missing_teams[["Team", "mark"]].reset_index().drop_duplicates()])
 
             # Sort by 'mark' in descending and 'Time' in ascending order
             sorted_df = df.sort_values(by=["mark", "Time"], ascending=[False, True])
@@ -368,16 +350,18 @@ def main():
 
                 if st.session_state.show_leaderboard or auto_refresh:
                     # Identify the last non-NaN value for each column
-                    last_non_nan_values = df.apply(lambda col: col.dropna().iloc[-1])
+                    last_non_nan_values = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
                     # Sort the values in descending order
-                    sorted_values = last_non_nan_values.sort_values(ascending=True)
+                    sorted_values = last_non_nan_values[['Team', 'mark']].sort_values(by='mark', ascending=True).set_index('Team')
 
                     # Get distinct colors for each bar using the viridis colormap
                     colors = plt.cm.viridis(np.linspace(0, 1, len(sorted_values)))
 
                     # Plotting the values
-                    fig = plt.figure(figsize=(10, 6))
-                    sorted_values.plot(kind="barh", color=colors)
+                    fig, ax = plt.subplots(figsize=(10, 6))
+
+                    # sorted_values.plot(y="mark",kind="barh", color=colors)
+                    ax.barh(sorted_values.index, sorted_values["mark"], color=colors)
                     plt.title("Leaderboard")
                     plt.ylabel("Value")
                     plt.xlabel("Column Name")
