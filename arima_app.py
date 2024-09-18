@@ -321,6 +321,8 @@ def main():
 
             missing_teams.set_index("Time", inplace=True)
 
+            df.reset_index(inplace=True)
+
             # Concatenate this to result_df
             df = pd.concat(
                 [df, missing_teams[["Team", "mark"]].drop_duplicates()],
@@ -328,18 +330,15 @@ def main():
             )
 
             # Sort by 'mark' in descending and 'Time' in ascending order
-            sorted_df = (
-                df.reset_index()
-                .rename(columns={"index": "Time"})
-                .sort_values(by=["mark", "Time"], ascending=[False, True])
-            )
+            sorted_df = df.sort_values(by=["mark", "Time"], ascending=[False, True])
+            
 
             try:
                 # Get the team with the highest mark that reached it the fastest
                 winning_team = sorted_df.iloc[0]["Team"]
 
                 # Pivot the DataFrame so that each 'Team' becomes a column
-                df = df.pivot(columns="Team", values="mark")
+                df = df.set_index("Time").pivot(columns="Team", values="mark")
 
                 if st.session_state.show_results:
                     # Create bar chart race animation
@@ -349,7 +348,7 @@ def main():
                             interpolate_period=True,
                             steps_per_period=n_steps,
                             title="Team leaderboard evolution",
-                            period_fmt="%H:%m",
+                            period_fmt="%H:%M:%S", 
                         ).data
                     except AttributeError:
                         html_str = bcr.bar_chart_race(
@@ -357,7 +356,7 @@ def main():
                             interpolate_period=True,
                             steps_per_period=n_steps,
                             title="Team leaderboard evolution",
-                            period_fmt="%H:%m",
+                            period_fmt="%H:%M:%S",
                         )
 
                     start = html_str.find("base64,") + len("base64,")
