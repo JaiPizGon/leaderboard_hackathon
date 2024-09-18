@@ -42,7 +42,8 @@ def read_previous_results():
             previous_results_df["lambda"] = (
                 previous_results_df["lambda"].str.replace(",", ".").astype(float)
             )
-
+        previous_results_df = previous_results_df.drop_duplicates(subset=previous_results_df.columns[previous_results_df.columns != 'Time'], keep='first')
+        previous_results_df.reset_index(drop=True, inplace=True)
         error_flag = 0
     except gspread.exceptions.SpreadsheetNotFound:
         previous_results_df = None
