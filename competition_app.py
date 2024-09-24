@@ -22,8 +22,8 @@ def read_data_to_validate():
     tuple: A tuple containing two values:
         - pd.DataFrame: A pandas DataFrame containing the validation data.
         - error_flag (int): An error flag indicating whether an error occurred during reading the file.
-          - 0: No error occurred.
-          - 1: File not found error occurred.
+            - 0: No error occurred.
+            - 1: File not found error occurred.
 
     """
     try:
@@ -35,7 +35,8 @@ def read_data_to_validate():
         # Convert list of dicts to a DataFrame
         validation_data = pd.DataFrame(list_of_dicts)
 
-        validation_data = validation_data.map(convert_to_numeric)
+        if config["leaderboard_problem_type"] != "classification":
+            validation_data = validation_data.map(convert_to_numeric)
 
     except gspread.exceptions.SpreadsheetNotFound:
         validation_data = None
@@ -188,7 +189,7 @@ def convert_to_numeric(s):
         return float(s.replace(",", "."))
     except ValueError:
         # If conversion fails, return None
-        print(f"Conversion failed for value: {s}")
+        # print(f"Conversion failed for value: {s}")
         return None
 
 
