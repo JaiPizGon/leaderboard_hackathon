@@ -16,7 +16,7 @@ st.set_page_config(layout="wide")
 @st.cache_data
 def convert_df(df):
     # IMPORTANT: Cache the conversion to prevent computation on every rerun
-    return df.to_csv().encode("utf-8")
+    return df.to_csv(index=False).encode("utf-8")
 
 
 def read_previous_results():
@@ -273,6 +273,21 @@ def main():
                 
             merged_df = cartesian_product.loc[idx, :]
 
+            # Obtain series statistics
+            cartesian_product["correct"] = idx.astype(int)
+            series_stats = pd.DataFrame(cartesian_product.groupby("Series_y")["correct"].sum(), columns=["correct"])
+            series_stats["incorrect"] = previous_results.groupby("Series")["Team"].count() - series_stats["correct"]
+
+            team_stats = cartesian_product.groupby(["Team","Series_y"])["correct"].sum().reset_index()
+            team_stats["correct"] = 0
+            team_stats["incorrect"] = 0
+            for _, row in cartesian_product.iterrows():
+                if row["Series_x"] == row["Series_y"]:
+                    if row["correct"] == 1:
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series_y"] == row["Series_y"]), "correct"] += 1
+                    else:
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series_y"] == row["Series_y"]), "incorrect"] += 1
+
             # Drop duplicated columns and rename columns to their original names
             merged_df = merged_df.drop(
                 columns=["Series_y"] + [col + "_y" for col in st.session_state.results.columns[1:]]
@@ -352,7 +367,7 @@ def main():
                     # Identify the last non-NaN value for each column
                     last_non_nan_values = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
                     # Sort the values in descending order
-                    sorted_values = last_non_nan_values[['Team', 'mark']].sort_values(by='mark', ascending=True).set_index('Team')
+                    sorted_values = last_non_nan_values.sort_values(by=['mark','Time'], ascending=[True, True])[['Team', 'mark']].set_index('Team')
 
                     # Get distinct colors for each bar using the viridis colormap
                     colors = plt.cm.viridis(np.linspace(0, 1, len(sorted_values)))
@@ -380,14 +395,33 @@ def main():
                 # Filtering the DataFrame to include only rows with max 'mark' for each 'Team'
                 filtered_df = sorted_df.loc[sorted_df.groupby("Team")["mark"].idxmax()]
 
-                filtered_df = filtered_df[["Team", "mark"]]
+                filtered_df = filtered_df[["Team", "mark", "Time"]].sort_values(by=['mark','Time'], ascending=[False, True]).drop_duplicates(subset=['Team', 'mark'], keep='first')
 
                 csv = convert_df(filtered_df)
+
+                series_stats.index.names = ["Series"]
+                series_csv = convert_df(series_stats.reset_index())
+
+                team_stats_csv = convert_df(team_stats)
 
                 st.download_button(
                     label="Download marks as CSV",
                     data=csv,
                     file_name="marks.csv",
+                    mime="text/csv",
+                )
+
+                st.download_button(
+                    label="Download Series Statistics",
+                    data=series_csv,
+                    file_name="series_stats.csv",
+                    mime="text/csv",
+                )
+                
+                st.download_button(
+                    label="Download Teams Statistics",
+                    data=team_stats_csv,
+                    file_name="team_stats.csv",
                     mime="text/csv",
                 )
             except IndexError:
