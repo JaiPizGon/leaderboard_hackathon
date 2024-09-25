@@ -278,95 +278,90 @@ def main():
             for col in st.session_state.results.columns[1:-1]:
                 idx &= cartesian_product[col + "_x"] == cartesian_product[col + "_y"]
                 
-            merged_df = cartesian_product.loc[idx, :]
-
             # Obtain series statistics
             cartesian_product["correct"] = idx.astype(int)
-            series_stats = pd.DataFrame(cartesian_product.groupby("Series_y")["correct"].sum(), columns=["correct"])
-            series_stats["incorrect"] = previous_results.groupby("Series")["Team"].count() - series_stats["correct"]
-
-            team_stats = cartesian_product.groupby(["Team","Series_y"])["correct"].sum().reset_index()
-            team_stats.columns = ["Team","Series","correct"]
-            team_stats["correct"] = 0
-            team_stats["incorrect"] = 0
-            team_stats["last_correct"] = 0
-            team_stats["n_tries"] = 0
-            team_stats["mark"] = 0
-            for _, row in cartesian_product.iterrows():
-                if row["Series_x"] == row["Series_y"]:
-                    if row["correct"] == 1:
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "correct"] += 1
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "last_correct"] = 1
-                    else:
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "incorrect"] += 1
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "last_correct"] = 0
-                    team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "n_tries"] += 1
-
-            for _, row in team_stats.iterrows():
-                if only_last_try:
-                    if row["last_correct"] == 1:
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series"]), "mark"] += float(series.loc[series["Series"] == row["Series"], "weight"].values[0])
-                elif row["correct"] > 0:
-                    team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series"]), "mark"] += float(series.loc[series["Series"] == row["Series"], "weight"].values[0])
-            team_stats["mark"] *= 100
-            # Drop duplicated columns and rename columns to their original names
-            merged_df = merged_df.drop(
-                columns=["Series_y"] + [col + "_y" for col in st.session_state.results.columns[1:]]
-            )
-            merged_df.columns = [col.replace("_x", "") for col in merged_df.columns]
-
-            merged_df = merged_df[["Time", "Series"] + list(st.session_state.results.columns) + ["weight"]]
-            previous_results = previous_results.drop(columns=["key", "index"])
-            series = series.drop(columns=["key"])
-
-            # Create a 'mark' column to hold the cumulative sum of 'weight' for each team
-            # This will be used for scoring, and is multiplied by 100 for percentage representation
-            merged_df = merged_df.sort_values(by=["Team", "Time", "Series"], ascending=[False, True, True])
-            merged_df["mark"] = merged_df.groupby("Team")["weight"].cumsum() * 100
-
-            # Re-set the index of the merged DataFrame to 'Time'
-            # This is to ensure that the DataFrame is indexed by time, which is likely important for time-series data
-            merged_df.set_index("Time", inplace=True)
-
-            # Number of steps for expanding the DataFrame index
-            n_steps = config["n_steps"]
-
-            # Filter the DataFrame to include only 'Team' and 'mark' columns
-            df = merged_df[["Team", "mark"]]
-
-            # Find teams in previous_results that are not in result_df
-            missing_teams = previous_results[~previous_results["Team"].isin(df["Team"])]
-
-            # Set the mark for these teams to 0.0
-            missing_teams["mark"] = 0.0
-
-            missing_teams.set_index("Time", inplace=True)
-
-            df.reset_index(inplace=True)
-
-            # Concatenate this to result_df
-            df = pd.concat([df, missing_teams[["Team", "mark"]].reset_index().drop_duplicates()])
-
-            # Sort by 'mark' in descending and 'Time' in ascending order
-            sorted_df = df.sort_values(by=["mark", "Time"], ascending=[False, True])
+            cartesian_product = cartesian_product.sort_values(["Time"], ascending=True)
             
-            if only_last_try:
-                for _, row in team_stats.iterrows():
-                    if row["last_correct"] == 0 and row["correct"] > 0:
-                        sorted_df.loc[sorted_df["Team"] == row["Team"], "mark"] -= float(series.loc[series["Series"] == row["Series"], "weight"].values[0]) * 100
+            # Create an empty dataset to store the marks of each team
+            # To do so, create an empty dataset with the columns "Time", "Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"
+            df = pd.DataFrame(columns=["Time", "Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"])
 
+            # Iterate over each row of the cartesian_product DataFrame, and update the df DataFrame
+            for index, row in cartesian_product.iterrows():
+                if row["Series_x"] != row["Series_y"]:
+                    continue
+                time = row["Time"]
+                team = row["Team"]
+                series = row["Series_x"]
+                correct = row["correct"]
+                incorrect = 1 - correct
+
+                # Check if the team and series already exist in the DataFrame
+                existing_index = df[(df["Team"] == team) & (df["Series"] == series)].index
+
+                if existing_index.empty:
+                    # If not, append a new row
+                    new_row = {
+                        "Time": time, 
+                        "Team": team, 
+                        "Series": series, 
+                        "correct": correct, 
+                        "incorrect": incorrect, 
+                        "n_tries": 1, 
+                        "last_correct": correct, 
+                        "mark": correct * row["weight"] * 100
+                    }
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+                else:
+                    # If it exists, update the corresponding row
+                    existing_idx = existing_index.max()
+                    correct_prev = df.at[existing_idx, "correct"]
+                    incorrect_prev = df.at[existing_idx, "incorrect"]
+                    n_tries_prev = df.at[existing_idx, "n_tries"]
+                    mark_prev = df.at[existing_idx, "mark"]
+                    if only_last_try:
+                        if mark_prev > 0:
+                            new_mark = - incorrect * row["weight"] * 100
+                        else:
+                            new_mark = correct * row["weight"] * 100
+                    else:
+                        if mark_prev > 0:
+                            new_mark = 0
+                        else:
+                            new_mark = correct * row["weight"] * 100
+                    new_row = {
+                        "Time": time, 
+                        "Team": team, 
+                        "Series": series, 
+                        "correct": correct_prev + correct, 
+                        "incorrect": incorrect_prev + incorrect, 
+                        "n_tries": n_tries_prev + 1, 
+                        "last_correct": correct, 
+                        "mark": new_mark
+                    }
+                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+
+            df = df.sort_values(by=["Team", "Series", "n_tries" , "Time", "mark"], ascending=[True, True, True, True, True])
+            df["cumsum_mark"] = df.groupby("Team").agg({"mark": "cumsum"})
+            
             try:
-                # Get the team with the highest mark that reached it the fastest
-                winning_team = sorted_df.iloc[0]["Team"]
+                team_marks = df.drop_duplicates(subset=["Team", "Series"], keep="last")
+                team_marks = team_marks.groupby("Team").agg({"cumsum_mark": "last", "correct": "sum", "incorrect": "sum", "n_tries": "sum", "Time": "last"}).reset_index()
 
+                # Get the team with the highest mark that reached it the fastest
+                winning_team = team_marks.sort_values(["cumsum_mark", "Time"], ascending=[False, True]).iloc[0]["Team"]
+
+                df = df.sort_values(["Team", "Time"])
+                df["mark"] = df.groupby("Team").agg({"mark": "cumsum"})
                 # Pivot the DataFrame so that each 'Team' becomes a column
-                df = df.set_index("Time").pivot(columns="Team", values="mark")
+                barplot_df = df.set_index("Time").pivot(columns="Team", values="mark")
 
                 if st.session_state.show_results:
+                    n_steps = config["n_steps"]
                     # Create bar chart race animation
                     try:
                         html_str = bcr.bar_chart_race(
-                            df.ffill().fillna(0),
+                            barplot_df.ffill().fillna(0),
                             interpolate_period=True,
                             steps_per_period=n_steps,
                             title="Team leaderboard evolution",
@@ -374,7 +369,7 @@ def main():
                         ).data
                     except AttributeError:
                         html_str = bcr.bar_chart_race(
-                            df.ffill().fillna(0),
+                            barplot_df.ffill().fillna(0),
                             interpolate_period=True,
                             steps_per_period=n_steps,
                             title="Team leaderboard evolution",
@@ -389,10 +384,9 @@ def main():
                     st.video(video)
 
                 if st.session_state.show_leaderboard or auto_refresh:
-                    # Identify the last non-NaN value for each column
-                    last_non_nan_values = sorted_df.loc[sorted_df.groupby('Team')['mark'].idxmax()]
                     # Sort the values in descending order
-                    sorted_values = last_non_nan_values.sort_values(by=['mark','Time'], ascending=[True, True])[['Team', 'mark']].set_index('Team')
+                    sorted_values = team_marks.sort_values(["cumsum_mark", "Time"], ascending=[True, True])[['Team', 'cumsum_mark']].set_index('Team')
+                    sorted_values.columns = ["mark"]
 
                     # Get distinct colors for each bar using the viridis colormap
                     colors = plt.cm.viridis(np.linspace(0, 1, len(sorted_values)))
@@ -404,7 +398,7 @@ def main():
                     ax.barh(sorted_values.index, sorted_values["mark"], color=colors)
                     plt.title("Leaderboard")
                     plt.ylabel("Value")
-                    plt.xlabel("Column Name")
+                    plt.xlabel("Mark")
                     plt.xticks(rotation=0)
                     plt.grid(axis="x", linestyle="--", alpha=0.7)
                     plt.tight_layout()
@@ -417,16 +411,16 @@ def main():
                 # Update last refresh time
                 st.session_state.last_refresh_time = datetime.now()
 
-                # Filtering the DataFrame to include only rows with max 'mark' for each 'Team'
-                filtered_df = sorted_df.loc[sorted_df.groupby("Team")["mark"].idxmax()]
+                
+                csv = convert_df(team_marks)
 
-                filtered_df = filtered_df[["Team", "mark", "Time"]].sort_values(by=['mark','Time'], ascending=[False, True]).drop_duplicates(subset=['Team', 'mark'], keep='first')
+                # Get the series statistics
+                series_stats = df.groupby("Series").agg({"correct": "sum", "incorrect": "sum", "n_tries": "sum"}).reset_index()
+                series_csv = convert_df(series_stats)
 
-                csv = convert_df(filtered_df)
-
-                series_stats.index.names = ["Series"]
-                series_csv = convert_df(series_stats.reset_index())
-
+                team_stats = df.groupby(["Team", "Series"]).agg({"correct": "sum", "incorrect": "sum", "n_tries": "sum", "last_correct": "last", "cumsum_mark": "last"}).reset_index()
+                team_stats.columns = ["Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"]
+                team_stats["mark"] = team_stats["mark"]
                 team_stats_csv = convert_df(team_stats)
 
                 st.download_button(
