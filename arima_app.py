@@ -195,6 +195,12 @@ def main():
     auto_refresh = st.sidebar.checkbox(
         "Enable auto-refresh", disabled=not admin_enabled
     )
+
+    # Only last try
+    only_last_try = st.sidebar.checkbox(
+        "Only last try", disabled=not admin_enabled, value=True
+    )
+
     refresh_interval = st.sidebar.number_input(
         "Refresh interval (seconds)", min_value=1, value=30, disabled=not admin_enabled
     )
@@ -254,6 +260,7 @@ def main():
             # Cartesian product of the two dataframes
             previous_results["key"] = 1
             series["key"] = 1
+
             cartesian_product = pd.merge(previous_results, series, on="key").drop(
                 "key", axis=1
             )
@@ -279,15 +286,29 @@ def main():
             series_stats["incorrect"] = previous_results.groupby("Series")["Team"].count() - series_stats["correct"]
 
             team_stats = cartesian_product.groupby(["Team","Series_y"])["correct"].sum().reset_index()
+            team_stats.columns = ["Team","Series","correct"]
             team_stats["correct"] = 0
             team_stats["incorrect"] = 0
+            team_stats["last_correct"] = 0
+            team_stats["n_tries"] = 0
+            team_stats["mark"] = 0
             for _, row in cartesian_product.iterrows():
                 if row["Series_x"] == row["Series_y"]:
                     if row["correct"] == 1:
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series_y"] == row["Series_y"]), "correct"] += 1
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "correct"] += 1
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "last_correct"] = 1
                     else:
-                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series_y"] == row["Series_y"]), "incorrect"] += 1
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "incorrect"] += 1
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "last_correct"] = 0
+                    team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series_y"]), "n_tries"] += 1
 
+            for _, row in team_stats.iterrows():
+                if only_last_try:
+                    if row["last_correct"] == 1:
+                        team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series"]), "mark"] += float(series.loc[series["Series"] == row["Series"], "weight"].values[0])
+                elif row["correct"] > 0:
+                    team_stats.loc[(team_stats["Team"] == row["Team"]) & (team_stats["Series"] == row["Series"]), "mark"] += float(series.loc[series["Series"] == row["Series"], "weight"].values[0])
+            team_stats["mark"] *= 100
             # Drop duplicated columns and rename columns to their original names
             merged_df = merged_df.drop(
                 columns=["Series_y"] + [col + "_y" for col in st.session_state.results.columns[1:]]
@@ -329,6 +350,10 @@ def main():
             # Sort by 'mark' in descending and 'Time' in ascending order
             sorted_df = df.sort_values(by=["mark", "Time"], ascending=[False, True])
             
+            if only_last_try:
+                for _, row in team_stats.iterrows():
+                    if row["last_correct"] == 0 and row["correct"] > 0:
+                        sorted_df.loc[sorted_df["Team"] == row["Team"], "mark"] -= float(series.loc[series["Series"] == row["Series"], "weight"].values[0]) * 100
 
             try:
                 # Get the team with the highest mark that reached it the fastest
