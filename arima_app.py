@@ -290,7 +290,7 @@ def main():
             for index, row in cartesian_product.iterrows():
                 if row["Series_x"] != row["Series_y"]:
                     continue
-                time = row["Time"]
+                time_row = row["Time"]
                 team = row["Team"]
                 series = row["Series_x"]
                 correct = row["correct"]
@@ -302,7 +302,7 @@ def main():
                 if existing_index.empty:
                     # If not, append a new row
                     new_row = {
-                        "Time": time, 
+                        "Time": time_row, 
                         "Team": team, 
                         "Series": series, 
                         "correct": correct, 
@@ -330,7 +330,7 @@ def main():
                         else:
                             new_mark = correct * row["weight"] * 100
                     new_row = {
-                        "Time": time, 
+                        "Time": time_row, 
                         "Team": team, 
                         "Series": series, 
                         "correct": correct_prev + correct, 
