@@ -338,18 +338,22 @@ def main():
             st.sidebar.warning(
                 f"You must wait {config['n_minutes'] * 60 - int(seconds_passed)} seconds to refresh again."
             )
-
+    
     if "previous_metrics" in st.session_state:
         prev_metrics = pd.DataFrame(
             st.session_state.previous_metrics, columns=["Team"] + config["col_show"]
         )
         prev_metrics.iloc[:, 1:] = prev_metrics.iloc[:, 1:].map(convert_to_numeric)
-        leaderboard_placeholder.dataframe(
-            prev_metrics.sort_values(
+        df = prev_metrics.sort_values(
                 by=config["col_show"][0],
                 ascending=not (config["leaderboard_problem_type"] == "classification"),
             ).reset_index(drop=True)
+        leaderboard_placeholder.table(
+            df.style.set_table_styles([{'selector': 'td, th', 'props': [('font-size', '30px')]}]).hide(axis="index").format(precision=2),
         )
+            # use_container_width=False,
+            # hide_index=True,
+            # height=config["leaderboard_height"]  # Adjust the height of the container (in pixels)
 
     if auto_refresh:
         time.sleep(refresh_interval)
