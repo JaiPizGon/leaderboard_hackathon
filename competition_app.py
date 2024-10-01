@@ -349,7 +349,7 @@ def main():
                 ascending=not (config["leaderboard_problem_type"] == "classification"),
             ).reset_index(drop=True)
         leaderboard_placeholder.table(
-            df.style.set_table_styles([{'selector': 'td, th', 'props': [('font-size', '30px')]}]).hide(axis="index").format(precision=2),
+            df.style.set_table_styles([{'selector': 'td, th', 'props': [('font-size', f'{config['font_size']}px')]}]).hide(axis="index").format(precision=2),
         )
             # use_container_width=False,
             # hide_index=True,
