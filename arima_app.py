@@ -118,8 +118,8 @@ def main():
             st.sidebar.error("Error: ARIMA series file could not be read.")
         else:
             st.session_state.options = [
-                f"{str(r['Series'])} (reward: {str(r['weight'])})"
-                for i, r in series.iterrows()
+                f"{str(r['Series'])} (reward: {str(r['weight'] * 100)})"
+                for i, r in series.drop_duplicates(subset='Series', keep=False).iterrows()
             ]
 
     # Dropdown for selecting Series number
@@ -205,22 +205,6 @@ def main():
         "Refresh interval (seconds)", min_value=1, value=30, disabled=not admin_enabled
     )
 
-    # Main area
-    st.title("Input parameters")
-
-    # Text inputs for each parameter
-    txtColumns = st.columns(len(st.session_state.results.columns) - 1)
-    for index, col in enumerate(st.session_state.results.columns[1:-2]):
-        with txtColumns[index]:
-            st.text_input(col, key=col)
-    with txtColumns[index + 1]:
-        st.text_input(
-            st.session_state.results.columns[-1],
-            key=st.session_state.results.columns[-1],
-        )
-    st.checkbox(
-        st.session_state.results.columns[-2], key=st.session_state.results.columns[-2]
-    )
 
     if st.session_state.show_solution:
         series_solution = st.session_state.series.loc[
@@ -343,6 +327,28 @@ def main():
 
             df = df.sort_values(by=["Team", "Series", "n_tries" , "Time", "mark"], ascending=[True, True, True, True, True])
             df["cumsum_mark"] = df.groupby("Team").agg({"mark": "cumsum"})
+            def process_duplicates(group):
+                if len(group) > 1:
+                    # Finding the row with max 'correct + incorrect' values
+                    max_row = group.loc[group['correct'] + group['incorrect'] == (group['correct'] + group['incorrect']).max()]
+                    
+                    # In case of tie, take the first row with max value
+                    max_row = max_row.iloc[0] if len(max_row) > 1 else max_row.squeeze()
+
+                    # Apply the required transformation based on 'last_correct'
+                    if max_row['last_correct'] == 0:
+                        max_row['last_correct'] = 1
+                        max_row['incorrect'] = max(0, max_row['incorrect'] - 1)  # Ensure non-negative incorrect
+                        max_row['n_tries'] -= 1  # Decrement the number of tries
+
+                    max_row['mark'] = group['mark'].max()
+                    max_row['cumsum_mark'] = group['cumsum_mark'].max()
+
+                    return max_row  # Return the modified or unmodified max row
+                else:
+                    return group.iloc[0]  # Return the row as is if no duplicate
+
+            df = df.groupby('Time').apply(process_duplicates).reset_index(drop=True)
             
             try:
                 team_marks = df.drop_duplicates(subset=["Team", "Series"], keep="last")
@@ -353,6 +359,8 @@ def main():
 
                 df = df.sort_values(["Team", "Time"])
                 df["mark"] = df.groupby("Team").agg({"mark": "cumsum"})
+
+                
                 # Pivot the DataFrame so that each 'Team' becomes a column
                 barplot_df = df.set_index("Time").pivot(columns="Team", values="mark")
 
