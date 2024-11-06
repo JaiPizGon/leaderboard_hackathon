@@ -241,98 +241,76 @@ def main():
                 by=previous_results.columns[2:-2].tolist()
             )
 
-            # Cartesian product of the two dataframes
-            previous_results["key"] = 1
-            series["key"] = 1
+            # Initialize a dictionary to store the results for each team and series
+            team_results = {}
 
-            cartesian_product = pd.merge(previous_results, series, on="key").drop(
-                "key", axis=1
-            )
-
-            # Filter the resulting dataframe based on conditions
-            idx = (
-                (cartesian_product["Series_x"] == cartesian_product["Series_y"])
-                & (
-                    (
-                        cartesian_product["lambda_x"] - cartesian_product["lambda_y"]
-                    ).abs()
-                    <= config["lambda_tol"]
-                )
-            )
-            for col in st.session_state.results.columns[1:-1]:
-                idx &= cartesian_product[col + "_x"] == cartesian_product[col + "_y"]
-                
-            # Obtain series statistics
-            cartesian_product["correct"] = idx.astype(int)
-            cartesian_product = cartesian_product.sort_values(["Time"], ascending=True)
-            
-            # Create an empty dataset to store the marks of each team
-            # To do so, create an empty dataset with the columns "Time", "Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"
-            df = pd.DataFrame(columns=["Time", "Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"])
-
-            cartesian_product = cartesian_product.loc[cartesian_product["Series_x"] == cartesian_product["Series_y"], :]
-
-            filtered_cartesian_product = (
-                cartesian_product.sort_values(by="correct", ascending=False)
-                .groupby(["Team", "Time", "Series_x", "correct"], as_index=False)
-                .first().sort_values(by=["Team", "Series_x", "Time"], ascending=[False, True, True])
-            )
-
-
-            # Iterate over each row of the cartesian_product DataFrame, and update the df DataFrame
-            for _, row in filtered_cartesian_product.iterrows():
-                time_row = row["Time"]
-                team = row["Team"]
-                series = row["Series_x"]
-                correct = row["correct"]
-                incorrect = 1 - correct
-
-                # Check if the team and series already exist in the DataFrame
-                existing_index = df[(df["Team"] == team) & (df["Series"] == series)].index
-
-                if existing_index.empty:
-                    # If not, append a new row
-                    new_row = {
-                        "Time": time_row,
-                        "Team": team,
-                        "Series": series,
-                        "correct": correct,
-                        "incorrect": incorrect,
-                        "n_tries": 1,
-                        "last_correct": correct,
-                        "mark": correct * row["weight"] * 100
-                    }
-                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
-                else:
-                    # If it exists, update the corresponding row
-                    existing_idx = existing_index.max()
-                    correct_prev = df.at[existing_idx, "correct"]
-                    incorrect_prev = df.at[existing_idx, "incorrect"]
-                    n_tries_prev = df.at[existing_idx, "n_tries"]
-                    mark_prev = df.at[existing_idx, "mark"]
+            # Group the data by Team and Series for each team's attempts on each series
+            for team, team_data in previous_results.groupby("Team"):
+                if team not in team_results:
+                    team_results[team] = {}
                     
-                    if only_last_try:
-                        if mark_prev > 0:
-                            new_mark = - incorrect * row["weight"] * 100
+                team_data = team_data.sort_values("Time")
+                for serie, attempts in team_data.groupby("Series"):
+                    # Initialize counters
+                    correct_attempts = 0
+                    incorrect_attempts = 0
+                    last_attempt_correct = False
+                    weight_to_add = 0
+                    
+                    # Process each attempt
+                    for _, attempt in attempts.iterrows():
+                        # Find matching row in the series DataFrame
+                        match = series[
+                            (series['Series'] == attempt['Series']) &
+                            (series['p'] == attempt['p']) &
+                            (series['d'] == attempt['d']) &
+                            (series['q'] == attempt['q']) &
+                            (series['P'] == attempt['P']) &
+                            (series['D'] == attempt['D']) &
+                            (series['Q'] == attempt['Q']) &
+                            (series['s'] == attempt['s']) &
+                            (series['include_mean'] == attempt['include_mean']) &
+                            (np.isclose(series['lambda'], attempt['lambda'], atol=config["lambda_tol"]))
+                        ]
+                        
+                        if not match.empty:
+                            correct_attempts += 1
+                            last_attempt_correct = True
+                            weight_to_add = match.iloc[0]['weight'] * 100
                         else:
-                            new_mark = correct * row["weight"] * 100
-                    else:
-                        new_mark = correct * row["weight"] * 100 if mark_prev <= 0 else 0
+                            incorrect_attempts += 1
+                            last_attempt_correct = False
+                    
+                        # Store results for each series attempted by the team
+                        team_results[team][attempt['Time']] = {
+                            'Series': serie,
+                            'correct': correct_attempts,
+                            'incorrect': incorrect_attempts,
+                            'last_correct': last_attempt_correct,
+                            'n_tries': correct_attempts + incorrect_attempts,
+                            'mark': weight_to_add if last_attempt_correct else 0
+                        }
 
-                    new_row = {
-                        "Time": time_row,
-                        "Team": team,
-                        "Series": series,
-                        "correct": correct_prev + correct,
-                        "incorrect": incorrect_prev + incorrect,
-                        "n_tries": n_tries_prev + 1,
-                        "last_correct": correct,
-                        "mark": new_mark
-                    }
-                    df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
+            # Convert the results dictionary to a DataFrame for easier analysis
+            df = pd.DataFrame([
+                {'Team': team, 'Time': time, **data}
+                for team, time_data in team_results.items()
+                for time, data in time_data.items()
+            ])
 
+            prev_series = "0"
+            prev_mark = 0.0
+            for idx, row in df.iterrows():
+                if row["Series"] != prev_series:
+                    prev_series = row["Series"]
+                    prev_mark = 0.0
+                if row["last_correct"] and prev_mark > 0:
+                    df.at[idx, "mark"] = 0.0
+                if only_last_try and not row["last_correct"] and prev_mark > 0:
+                    df.at[idx, "mark"] = -prev_mark
+                prev_mark = row["mark"]
+                prev_series = row["Series"]
 
-            df = df.sort_values(by=["Team", "Series", "n_tries" , "Time", "mark"], ascending=[True, True, True, True, True])
             df["cumsum_mark"] = df.groupby("Team").agg({"mark": "cumsum"})
             
             try:
