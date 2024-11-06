@@ -91,8 +91,8 @@ def main():
             st.sidebar.error("Error: ARIMA series file could not be read.")
         else:
             st.session_state.options = [
-                f"{str(r['Series'])} (reward: {str(r['weight'])})"
-                for i, r in series.iterrows()
+                f"{str(r['Series'])} (reward: {str(r['weight'] * 100)})"
+                for i, r in series.drop_duplicates(subset='Series', keep=False).iterrows()
             ]
 
     # Dropdown for selecting Series number

@@ -119,7 +119,7 @@ def main():
         else:
             st.session_state.options = [
                 f"{str(r['Series'])} (reward: {str(r['weight'] * 100)})"
-                for i, r in series.drop_duplicates(subset='Series', keep=False).iterrows()
+                for _, r in series.drop_duplicates(subset='Series', keep=False).iterrows()
             ]
 
     # Dropdown for selecting Series number
@@ -348,7 +348,7 @@ def main():
                 else:
                     return group.iloc[0]  # Return the row as is if no duplicate
 
-            df = df.groupby('Time').apply(process_duplicates).reset_index(drop=True)
+            df = df.groupby(["Team", "Series", 'Time']).apply(process_duplicates).reset_index(drop=True)
             
             try:
                 team_marks = df.drop_duplicates(subset=["Team", "Series"], keep="last")
