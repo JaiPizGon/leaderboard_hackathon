@@ -270,10 +270,17 @@ def main():
             # To do so, create an empty dataset with the columns "Time", "Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"
             df = pd.DataFrame(columns=["Time", "Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"])
 
+            cartesian_product = cartesian_product.loc[cartesian_product["Series_x"] == cartesian_product["Series_y"], :]
+
+            filtered_cartesian_product = (
+                cartesian_product.sort_values(by="correct", ascending=False)
+                .groupby(["Team", "Time", "Series_x", "correct"], as_index=False)
+                .first().sort_values(by=["Team", "Series_x", "Time"], ascending=[False, True, True])
+            )
+
+
             # Iterate over each row of the cartesian_product DataFrame, and update the df DataFrame
-            for index, row in cartesian_product.iterrows():
-                if row["Series_x"] != row["Series_y"]:
-                    continue
+            for _, row in filtered_cartesian_product.iterrows():
                 time_row = row["Time"]
                 team = row["Team"]
                 series = row["Series_x"]
@@ -286,13 +293,13 @@ def main():
                 if existing_index.empty:
                     # If not, append a new row
                     new_row = {
-                        "Time": time_row, 
-                        "Team": team, 
-                        "Series": series, 
-                        "correct": correct, 
-                        "incorrect": incorrect, 
-                        "n_tries": 1, 
-                        "last_correct": correct, 
+                        "Time": time_row,
+                        "Team": team,
+                        "Series": series,
+                        "correct": correct,
+                        "incorrect": incorrect,
+                        "n_tries": 1,
+                        "last_correct": correct,
                         "mark": correct * row["weight"] * 100
                     }
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
@@ -303,52 +310,30 @@ def main():
                     incorrect_prev = df.at[existing_idx, "incorrect"]
                     n_tries_prev = df.at[existing_idx, "n_tries"]
                     mark_prev = df.at[existing_idx, "mark"]
+                    
                     if only_last_try:
                         if mark_prev > 0:
                             new_mark = - incorrect * row["weight"] * 100
                         else:
                             new_mark = correct * row["weight"] * 100
                     else:
-                        if mark_prev > 0:
-                            new_mark = 0
-                        else:
-                            new_mark = correct * row["weight"] * 100
+                        new_mark = correct * row["weight"] * 100 if mark_prev <= 0 else 0
+
                     new_row = {
-                        "Time": time_row, 
-                        "Team": team, 
-                        "Series": series, 
-                        "correct": correct_prev + correct, 
-                        "incorrect": incorrect_prev + incorrect, 
-                        "n_tries": n_tries_prev + 1, 
-                        "last_correct": correct, 
+                        "Time": time_row,
+                        "Team": team,
+                        "Series": series,
+                        "correct": correct_prev + correct,
+                        "incorrect": incorrect_prev + incorrect,
+                        "n_tries": n_tries_prev + 1,
+                        "last_correct": correct,
                         "mark": new_mark
                     }
                     df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
+
             df = df.sort_values(by=["Team", "Series", "n_tries" , "Time", "mark"], ascending=[True, True, True, True, True])
             df["cumsum_mark"] = df.groupby("Team").agg({"mark": "cumsum"})
-            def process_duplicates(group):
-                if len(group) > 1:
-                    # Finding the row with max 'correct + incorrect' values
-                    max_row = group.loc[group['correct'] + group['incorrect'] == (group['correct'] + group['incorrect']).max()]
-                    
-                    # In case of tie, take the first row with max value
-                    max_row = max_row.iloc[0] if len(max_row) > 1 else max_row.squeeze()
-
-                    # Apply the required transformation based on 'last_correct'
-                    if max_row['last_correct'] == 0:
-                        max_row['last_correct'] = 1
-                        max_row['incorrect'] = max(0, max_row['incorrect'] - 1)  # Ensure non-negative incorrect
-                        max_row['n_tries'] -= 1  # Decrement the number of tries
-
-                    max_row['mark'] = group['mark'].max()
-                    max_row['cumsum_mark'] = group['cumsum_mark'].max()
-
-                    return max_row  # Return the modified or unmodified max row
-                else:
-                    return group.iloc[0]  # Return the row as is if no duplicate
-
-            df = df.groupby(["Team", "Series", 'Time']).apply(process_duplicates).reset_index(drop=True)
             
             try:
                 team_marks = df.drop_duplicates(subset=["Team", "Series"], keep="last")
