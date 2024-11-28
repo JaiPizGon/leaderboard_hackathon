@@ -292,7 +292,7 @@ def main():
                         else:
                             try:
                                 worksheet.append_row(
-                                    error_metrics[previous_metrics.columns].fillna(0.0).values.tolist()[0]
+                                    error_metrics[previous_metrics.columns if previous_metrics.columns.any() else config["col_show"] + [x for x in error_metrics.columns if x not in config["col_show"]]].fillna(0.0).values.tolist()[0]
                                 )
                                 st.sidebar.success(
                                     f"Leaderboard updated. You have {config['n_tries'] - team_tries - 1} tries left."
