@@ -135,11 +135,12 @@ def calculate_error_metrics(predictions, true_values, team_name, commentary):
         error_metrics["Theils'U"] = numerator / denominator
     elif config["leaderboard_problem_type"] == "icade":
         residuals = predictions.values - true_values.values
-        # MAE (Mean Absolute Error)
-        error_metrics["MAE"] = np.mean(np.abs(residuals))
 
         # RMSE (Root Mean Squared Error)
         error_metrics["RMSE"] = np.sqrt(np.mean((residuals) ** 2))
+
+        # MAE (Mean Absolute Error)
+        error_metrics["MAE"] = np.mean(np.abs(residuals))
 
         # MAPE (Mean Absolute Percentage Error)
         error_metrics["MAPE"] = np.mean(np.abs((residuals) / true_values)) * 100
@@ -291,7 +292,7 @@ def main():
                         else:
                             try:
                                 worksheet.append_row(
-                                    error_metrics.fillna(0.0).values.tolist()[0]
+                                    error_metrics[previous_metrics.columns].fillna(0.0).values.tolist()[0]
                                 )
                                 st.sidebar.success(
                                     f"Leaderboard updated. You have {config['n_tries'] - team_tries - 1} tries left."
