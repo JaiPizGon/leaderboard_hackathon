@@ -260,18 +260,35 @@ def main():
                     # Process each attempt
                     for _, attempt in attempts.iterrows():
                         # Find matching row in the series DataFrame
-                        match = series[
-                            (series['Series'] == attempt['Series']) &
-                            (series['p'] == attempt['p']) &
-                            (series['d'] == attempt['d']) &
-                            (series['q'] == attempt['q']) &
-                            (series['P'] == attempt['P']) &
-                            (series['D'] == attempt['D']) &
-                            (series['Q'] == attempt['Q']) &
-                            (series['s'] == attempt['s']) &
-                            (series['include_mean'] == attempt['include_mean']) &
-                            (np.isclose(series['lambda'], attempt['lambda'], atol=config["lambda_tol"]))
-                        ]
+                        if config["arima_problem_type"] == "ARMA":
+                            match = series[
+                                (series["Series"] == attempt["Series"])
+                                & (series["p"] == attempt["p"])
+                                & (series["q"] == attempt["q"])
+                                & (series["include_mean"] == attempt["include_mean"])
+                            ]
+                        elif config["arima_problem_type"] == "ARIMA":
+                            match = series[
+                                (series["Series"] == attempt["Series"])
+                                & (series["p"] == attempt["p"])
+                                & (series["d"] == attempt["d"])
+                                & (series["q"] == attempt["q"])
+                                & (series["include_mean"] == attempt["include_mean"])
+                                & (np.isclose(series["lambda"], attempt["lambda"], atol=config["lambda_tol"]))
+                            ]
+                        else:
+                            match = series[
+                                (series['Series'] == attempt['Series']) &
+                                (series['p'] == attempt['p']) &
+                                (series['d'] == attempt['d']) &
+                                (series['q'] == attempt['q']) &
+                                (series['P'] == attempt['P']) &
+                                (series['D'] == attempt['D']) &
+                                (series['Q'] == attempt['Q']) &
+                                (series['s'] == attempt['s']) &
+                                (series['include_mean'] == attempt['include_mean']) &
+                                (np.isclose(series['lambda'], attempt['lambda'], atol=config["lambda_tol"]))
+                            ]
                         
                         if not match.empty:
                             correct_attempts += 1
