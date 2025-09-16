@@ -142,20 +142,40 @@ def main():
                 ].value_counts()[team_name]
             except KeyError:
                 team_tries = 0
-
+            
             if team_tries < config["n_tries"]:
                 # Read result from the student
                 entry_empty = False
                 df_dict = {"Team": team_name, "Series": option.split(" ")[0]}
+                
+                
+                # Obtain the solution for the selected series from the series dataframe
+                if config["show_correct"]:
+                    solution = st.session_state.series.loc[st.session_state.series["Series"] == option.split(" ")[0],:]
+                    correct_guess = True
+                
                 for index, col in enumerate(st.session_state.results.columns[1:]):
                     if col == "include_mean":
                         df_dict[col] = int(st.session_state[col])
                     else:
                         df_dict[col] = st.session_state[col]
+                    
+                    if config["show_correct"]:
+                        # Check if col is correct comparing with the solution
+                        if col in solution.columns and str(df_dict[col]) != str(solution.iloc[0][col]):
+                            correct_guess = False
+                    
                     if st.session_state[col] == "":
                         entry_empty = True
                         break
                 df_dict["Time"] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                
+                # Show in the main panel if the guess is correct or not
+                if config["show_correct"]:
+                    if correct_guess:
+                        st.success(f"Correct!", icon="✅")
+                    else:
+                        st.error(f"Wrong! Try again.", icon="🚨")
 
                 if entry_empty:
                     st.sidebar.error("Error: could not submit empty inputs")
