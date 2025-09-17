@@ -217,6 +217,36 @@ def main():
     st.checkbox(
         st.session_state.results.columns[-2], key=st.session_state.results.columns[-2]
     )
+    
+    # Display the current results DataFrame only for the team credentials
+    # Only show the team results if the user is validated and only if the results of that team
+    # Also, show if the trys were correct or not if the config file indicates so, with a "correct" flag next to their tries
+    # You should show all tries and for each try if it was correct or not
+    if validate_user(team_name, password):
+        previous_results, worksheet, previous_error_flag = read_previous_results()
+        if previous_error_flag:
+            st.error("Error: Previous tries could not be loaded.")
+        else:
+            # Filter results for the current team
+            team_results = previous_results[previous_results["Team"] == team_name]
+            if config["show_correct"]:
+                # Add a column indicating if the try was correct or not
+                def check_correct(row):
+                    solution = st.session_state.series.loc[st.session_state.series["Series"] == row["Series"], :]
+                    if solution.empty:
+                        return False
+                    for col in st.session_state.results.columns[1:]:
+                        if col in solution.columns and str(row[col]) != str(solution.iloc[0][col]):
+                            return False
+                    return True
+
+                team_results["Correct"] = team_results.apply(check_correct, axis=1)
+                # Remove the "Time" column and reset index
+                team_results = team_results.drop(columns=["Time"])
+                st.write("Your previous results:")
+            else:
+                st.write("Your previous results:")
+            st.dataframe(team_results.reset_index(drop=True))
 
 
 if __name__ == "__main__":
