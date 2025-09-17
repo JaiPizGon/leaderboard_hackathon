@@ -373,7 +373,7 @@ def main():
 
                 if st.session_state.show_leaderboard or auto_refresh:
                     # Sort the values in descending order
-                    sorted_values = team_marks.sort_values(["cumsum_mark", "Time"], ascending=[True, True])[['Team', 'cumsum_mark']].set_index('Team')
+                    sorted_values = team_marks.sort_values(["cumsum_mark", "Time"], ascending=[True, False])[['Team', 'cumsum_mark']].set_index('Team')
                     sorted_values.columns = ["mark"]
 
                     # Get distinct colors for each bar using the viridis colormap
@@ -406,8 +406,10 @@ def main():
                 series_stats = df.groupby("Series").agg({"correct": "sum", "incorrect": "sum", "n_tries": "sum"}).reset_index()
                 series_csv = convert_df(series_stats)
 
-                team_stats = df.groupby(["Team", "Series"]).agg({"correct": "sum", "incorrect": "sum", "n_tries": "sum", "last_correct": "last", "cumsum_mark": "last"}).reset_index()
-                team_stats.columns = ["Team", "Series", "correct", "incorrect", "n_tries", "last_correct", "mark"]
+                team_stats = df.drop_duplicates(subset=["Team", "Series"], keep="last") # df.groupby(["Team", "Series"]).agg({"correct": "last", "incorrect": "last", "n_tries": "last", "last_correct": "last", "cumsum_mark": "last"}).reset_index()
+                # Delete Time and mark column from team_stats
+                team_stats = team_stats.drop(columns=["Time", "mark"])
+                team_stats.columns = ["Team", "Series", "correct", "incorrect", "last_correct", "n_tries", "mark"]
                 team_stats["mark"] = team_stats["mark"]
                 team_stats_csv = convert_df(team_stats)
 
