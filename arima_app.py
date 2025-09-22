@@ -317,7 +317,12 @@ def main():
 
             prev_series = "0"
             prev_mark = 0.0
+            prev_Team = "NoTeam"
             for idx, row in df.iterrows():
+                if row["Team"] != prev_Team:
+                    prev_Team = row["Team"]
+                    prev_series = "0"
+                    prev_mark = 0.0
                 if row["Series"] != prev_series:
                     prev_series = row["Series"]
                     prev_mark = 0.0
