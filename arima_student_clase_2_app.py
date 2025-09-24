@@ -4,7 +4,7 @@ from google.oauth2 import service_account
 import gspread
 from datetime import datetime
 from utils import read_users_file, validate_user
-
+import numpy as np
 
 # Make the web page fill the full area
 st.set_page_config(layout="wide")
@@ -162,8 +162,14 @@ def main():
                     
                     if config["show_correct"]:
                         # Check if col is correct comparing with the solution
-                        if col in solution.columns and str(df_dict[col]) != str(solution.iloc[0][col]):
-                            correct_guess = False
+                        if col != "lambda":
+                            if col in solution.columns and str(df_dict[col]) != str(solution.iloc[0][col]):
+                                correct_guess = False
+                        else:
+                            lambda_student = float(df_dict[col].replace(",", "."))
+                            lambda_solution = float(solution.iloc[0][col].replace(",", "."))
+                            if np.isclose(lambda_student, lambda_solution, atol=config["lambda_tol"]) == False:
+                                correct_guess = False
                     
                     if st.session_state[col] == "":
                         entry_empty = True
@@ -227,26 +233,35 @@ def main():
         if previous_error_flag:
             st.error("Error: Previous tries could not be loaded.")
         else:
-            # Filter results for the current team
-            team_results = previous_results[previous_results["Team"] == team_name]
-            if config["show_correct"]:
-                # Add a column indicating if the try was correct or not
-                def check_correct(row):
-                    solution = st.session_state.series.loc[st.session_state.series["Series"] == row["Series"], :]
-                    if solution.empty:
-                        return False
-                    for col in st.session_state.results.columns[1:]:
-                        if col in solution.columns and str(row[col]) != str(solution.iloc[0][col]):
+            # check if previous results is not empty
+            if previous_results is not None and not previous_results.empty:
+                
+                # Filter results for the current team
+                team_results = previous_results[previous_results["Team"] == team_name]
+                if config["show_correct"]:
+                    # Add a column indicating if the try was correct or not
+                    def check_correct(row):
+                        solution = st.session_state.series.loc[st.session_state.series["Series"] == row["Series"], :]
+                        if solution.empty:
                             return False
-                    return True
+                        for col in st.session_state.results.columns[1:]:
+                            if col != "lambda":
+                                if col in solution.columns and str(row[col]) != str(solution.iloc[0][col]):
+                                    return False
+                            else:
+                                lambda_student = float(row[col].replace(",", "."))
+                                lambda_solution = float(solution.iloc[0][col].replace(",", "."))
+                                if np.isclose(lambda_student, lambda_solution, atol=config["lambda_tol"]) == False:
+                                    return False
+                        return True
 
-                team_results["Correct"] = team_results.apply(check_correct, axis=1)
-                # Remove the "Time" column and reset index
-                team_results = team_results.drop(columns=["Time"])
-                st.write("Your previous results:")
-            else:
-                st.write("Your previous results:")
-            st.dataframe(team_results.reset_index(drop=True))
+                    team_results["Correct"] = team_results.apply(check_correct, axis=1)
+                    # Remove the "Time" column and reset index
+                    team_results = team_results.drop(columns=["Time"])
+                    st.write("Your previous results:")
+                else:
+                    st.write("Your previous results:")
+                st.dataframe(team_results.reset_index(drop=True))
 
 
 if __name__ == "__main__":
